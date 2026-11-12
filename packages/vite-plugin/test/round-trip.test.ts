@@ -43,21 +43,28 @@ describe('Vite Plugin Round-trip Integration', () => {
     expect(html).toContain('/@flimsy/client.js');
   });
 
-  it('serves client overlay script at /@flimsy/client.js', async () => {
+  it('serves client overlay script with Shadow DOM and breadcrumb inspector', async () => {
     const res = await fetch(`${serverUrl}/@flimsy/client.js`);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('application/javascript');
     const script = await res.text();
     expect(script).toContain('Flimsy Inspector');
+    expect(script).toContain('attachShadow({ mode: \'open\' })');
+    expect(script).toContain('Alt+X');
+    expect(script).toContain('flimsy-breadcrumbs');
+    expect(script).toContain('flimsy-comp-name');
+    expect(script).toContain('handle-tl');
   });
 
-  it('transforms TSX module and stamps data-flimsy-* coordinates', async () => {
+  it('transforms TSX module and stamps data-flimsy-* coordinates with component context', async () => {
     const res = await fetch(`${serverUrl}/src/components/Hero.tsx`);
     expect(res.status).toBe(200);
     const code = await res.text();
     expect(code).toContain('"data-flimsy-file": "src/components/Hero.tsx"');
     expect(code).toContain('"data-flimsy-line"');
     expect(code).toContain('"data-flimsy-col"');
+    expect(code).toContain('"data-flimsy-name"');
+    expect(code).toContain('"data-flimsy-comp": "Hero"');
   });
 
   it('performs full round-trip: /__flimsy/api/update modifies physical TSX file', async () => {

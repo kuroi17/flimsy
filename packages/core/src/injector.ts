@@ -20,6 +20,7 @@ export function injectSourceLocations(
 
   const root = options.rootDir || process.cwd();
   const relFile = path.relative(root, cleanId).replace(/\\/g, '/');
+  const compName = path.basename(relFile).replace(/\.[jt]sx?$/, '');
 
   let ast: any;
   try {
@@ -52,9 +53,21 @@ export function injectSourceLocations(
       const line = node.loc.start.line;
       const col = node.loc.start.column;
 
+      let tagName = '';
+      if (node.name.type === 'JSXIdentifier') {
+        tagName = node.name.name;
+      } else if (node.name.type === 'JSXMemberExpression') {
+        const obj = node.name.object?.name || '';
+        const prop = node.name.property?.name || '';
+        tagName = `${obj}.${prop}`;
+      }
+
+      const isComponent = /^[A-Z]/.test(tagName);
+      const elemType = isComponent ? 'component' : 'element';
+
       const insertPos = node.name.end;
       if (typeof insertPos === 'number') {
-        const injectedAttrs = ` data-flimsy-file="${relFile}" data-flimsy-line="${line}" data-flimsy-col="${col}"`;
+        const injectedAttrs = ` data-flimsy-file="${relFile}" data-flimsy-line="${line}" data-flimsy-col="${col}" data-flimsy-name="${tagName}" data-flimsy-comp="${compName}" data-flimsy-type="${elemType}"`;
         s.appendRight(insertPos, injectedAttrs);
       }
     },
@@ -65,3 +78,4 @@ export function injectSourceLocations(
     map: s.generateMap({ hires: true, source: cleanId }),
   };
 }
+

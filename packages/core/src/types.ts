@@ -29,3 +29,4 @@ export interface UpdateResult {
 export interface InjectOptions {
   rootDir?: string;
 }
+

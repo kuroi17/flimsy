@@ -19,3 +19,4 @@ describe('flimsy CLI package exports', () => {
     expect(plugin.apply).toBe('serve');
   });
 });
+

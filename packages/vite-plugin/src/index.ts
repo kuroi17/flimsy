@@ -92,3 +92,4 @@ export function flimsy(options: FlimsyOptions = {}): Plugin {
 }
 
 export default flimsy;
+

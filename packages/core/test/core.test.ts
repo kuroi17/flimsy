@@ -16,7 +16,24 @@ describe('@flimsy/core: injectSourceLocations', () => {
     expect(result.code).toContain('data-flimsy-file="src/Button.tsx"');
     expect(result.code).toContain('data-flimsy-line="2"');
     expect(result.code).toContain('data-flimsy-col="9"');
+    expect(result.code).toContain('data-flimsy-name="button"');
+    expect(result.code).toContain('data-flimsy-comp="Button"');
+    expect(result.code).toContain('data-flimsy-type="element"');
     expect(result.code).toContain('className="p-2 bg-blue-500"');
+  });
+
+  it('detects custom component boundaries', () => {
+    const input = `export function App() {
+  return <Hero title="Welcome" />;
+}`;
+    const result = injectSourceLocations(input, '/workspace/src/App.tsx', {
+      rootDir: '/workspace',
+    });
+
+    expect(result.code).toContain('data-flimsy-file="src/App.tsx"');
+    expect(result.code).toContain('data-flimsy-name="Hero"');
+    expect(result.code).toContain('data-flimsy-comp="App"');
+    expect(result.code).toContain('data-flimsy-type="component"');
   });
 
   it('skips fragments and node_modules', () => {
@@ -114,3 +131,4 @@ export function Button() {
     expect(updatedContent).not.toContain('bg-white');
   });
 });
+

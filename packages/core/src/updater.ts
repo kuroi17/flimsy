@@ -297,3 +297,4 @@ function getTailwindPropertyPrefix(cls: string): string | null {
 
   return null;
 }
+

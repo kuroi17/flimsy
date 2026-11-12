@@ -66,3 +66,4 @@ if (command === 'dev') {
   console.error(`Unknown command: \${command}`);
   process.exit(1);
 }
+

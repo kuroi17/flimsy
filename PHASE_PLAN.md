@@ -56,19 +56,19 @@
 
 ---
 
-## Phase 1: Injected Visual Overlay & DOM Inspector (Weeks 2–3)
+## Phase 1: Injected Visual Overlay & DOM Inspector (Weeks 2–3) [COMPLETED]
 **Goal:** Build a non-destructive, Figma-like selection and inspection experience in the browser.
 
-- [ ] **Shadow DOM UI Isolation**
-  - Mount Flimsy UI inside a closed Shadow DOM container so host app styles (Tailwind, resets) never clash with Flimsy, and Flimsy styles never pollute host CSS.
-- [ ] **Interactive Hover & Click Selector**
-  - Deep element picker: hover highlights element bounds (bounding box).
-  - Element info badge: displays tag name, dimensions ($W \times H$), and source file + line.
-  - Nested hierarchy breadcrumb (e.g. `Section > Container > Card > Button`).
-  - Toggle key / shortcut (e.g. `Alt + X` or floating toggle pill) to enable/disable visual edit mode so normal app interactions (clicks, inputs) still work.
-- [ ] **Component Boundary Detection**
-  - Distinguish between a native HTML element (`<button>`) and a custom component boundary (`<PrimaryButton>`).
-  - Display whether the user is modifying the component invocation site vs. the component definition file.
+- [x] **Shadow DOM UI Isolation**
+  - Mounted Flimsy UI inside an isolated Shadow DOM container (`attachShadow({ mode: 'open' })`) preventing any style leakage to or from the host application.
+- [x] **Interactive Hover & Click Selector**
+  - Deep element picker: hover highlights element bounds with smooth outline, dimension badge ($W \times H$), and corner handles.
+  - Element info badge: displays tag name, component context, dimensions ($W \times H$), and source file + line.
+  - Nested hierarchy breadcrumb: computes full parent hierarchy trail (`App:<main> › Hero:<div> › <button>`), allowing one-click selection of ancestor containers.
+  - Global toggle shortcut (`Alt + X` or floating toggle pill) to enable/disable visual inspect mode seamlessly; `Esc` to close or deselect.
+- [x] **Component Boundary Detection**
+  - Distinguishes between native HTML element (`<button>`) and custom component boundary (`<Hero />`).
+  - Displays component context and scope (`Component Definition` vs invocation layout).
 
 ---
 
