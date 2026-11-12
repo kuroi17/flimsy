@@ -4,7 +4,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-console.log('\x1b[36m%s\x1b[0m', '⚡ Flimsy: Direct UI changes synced to codebase.');
+console.log('\x1b[36m%s\x1b[0m', 'Flimsy: Direct UI changes synced to codebase.');
 
 const options = {
   help: { type: 'boolean', short: 'h' },

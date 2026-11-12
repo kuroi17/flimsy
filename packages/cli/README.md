@@ -1,50 +1,65 @@
-# ⚡ Flimsy
+<p align="center">
+  <img src="./assets/logo.webp" alt="Flimsy Logo" width="140" />
+</p>
 
-> **"If I can visually fix my UI faster than I can explain the fix to AI, your tool has a reason to exist."**  
-> *Direct UI changes synced directly to your codebase.*
+<h1 align="center">Flimsy</h1>
 
-[![CI](https://github.com/kuroi17/flimsy/actions/workflows/ci.yml/badge.svg)](https://github.com/kuroi17/flimsy)
-[![npm version](https://img.shields.io/npm/v/flimsy-dev.svg)](https://www.npmjs.com/package/flimsy-dev)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Zero Telemetry](https://img.shields.io/badge/telemetry-none-brightgreen.svg)](#privacy--local-first-guarantee)
+<p align="center">
+  <strong>Direct visual-to-code synchronization for React, Vite, and Tailwind CSS.</strong><br />
+  If you can visually fix a UI faster than explaining the fix to an LLM, Flimsy belongs in your workflow.
+</p>
 
-**Flimsy** is a lightweight, local-first visual editor for React and Vite projects. It brings a Figma-like direct manipulation layer straight into your running localhost browser—modifying Tailwind classes, text, and components with deterministic AST code sync.
-
----
-
-## 🎯 Why Flimsy?
-
-Current developer workflows often require taking screenshots, writing verbose prompts to an LLM, waiting for generations, and reviewing whole-file diffs just to nudge padding or change a background color.
-
-* **Zero AI Tokens for Standard Edits:** Visual changes write directly to your physical `.tsx` files via AST manipulation using `recast`.
-* **Zero Cognitive Overload:** Modern, minimalist studio dock that stays completely out of your way until you press `Alt + X`.
-* **Isolated Shadow DOM:** 100% isolated inside a closed Shadow DOM container so host app styles never clash with Flimsy.
-* **Smart Tailwind Reconciliation:** Category-aware conflict resolution (e.g. `p-6` cleanly overrides `px-4 py-2`, while preserving hover variants and text colors).
-* **Compatible with shadcn/ui & Template Strings:** Safely modifies `cn(...)`, `clsx(...)`, and template literals without destroying dynamic expressions.
+<p align="center">
+  <a href="https://www.npmjs.com/package/flimsy-dev"><img src="https://img.shields.io/npm/v/flimsy-dev.svg" alt="npm version" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
+  <a href="#privacy--local-first-guarantee"><img src="https://img.shields.io/badge/telemetry-none-brightgreen.svg" alt="Zero Telemetry" /></a>
+</p>
 
 ---
 
-## 🚀 Quickstart
+**Flimsy** embeds an isolated, glassmorphic visual studio directly on your running Vite localhost server. Edit Tailwind spacing, typography, layout, colors, and inline text directly in the browser, preview the exact diff, and write deterministic AST changes straight back into your `.tsx` source files with zero AI token overhead.
 
-### Option 1: Zero-Config NPX Runner (Recommended)
+## Why Flimsy
 
-Run Flimsy in your existing React + Vite project with zero installation:
+- **Zero AI Tokens for Standard Visual Edits:** Modifies your `.tsx` files directly via deterministic AST reconciliation (`recast` + `magic-string`), preserving formatting, comments, and dynamic expressions.
+- **Minimalist Floating Studio:** Frosted glass dock, collapsible Layers tree, and compact Inspector inspired by Figma's spatial clarity.
+- **Isolated Shadow DOM:** Mounted inside an open Shadow DOM host so Flimsy styles never bleed into or break your application CSS.
+- **Smart Tailwind Conflict Resolution:** Category-aware reconciliation (`p-6` cleanly overrides `px-4 py-2`, `text-sm` never collides with `text-white` or `dark:` variants).
+- **Compatible with `cn()`, `clsx()`, and Template Literals:** Safely edits utility helper calls and dynamic class expressions without stripping logic.
+- **Optional Zero-Token AI Assist:** Collapsible heuristic style presets plus one-click context-aware prompt packaging for Cursor or Claude Code.
+
+---
+
+## Quickstart
+
+### Option 1: Zero-Install CLI (`npx`)
+
+Run Flimsy inside any existing React + Vite + Tailwind project:
 
 ```bash
-npx flimsy-dev dev
+npx flimsy-dev@latest dev
 ```
 
-### Option 2: Standalone Vite Plugin
-
-Install Flimsy as a development dependency:
+Useful CLI flags:
 
 ```bash
-pnpm add -D flimsy-dev
-# or
+npx flimsy-dev@latest dev --open        # Automatically launch browser
+npx flimsy-dev@latest dev --port 5173   # Custom Vite dev port
+npx flimsy-dev@latest dev --host        # Expose server on local network
+npx flimsy-dev@latest --version       # Check CLI version
+```
+
+### Option 2: Install as a Dev Dependency
+
+Install the unified `flimsy-dev` package (includes CLI, Vite plugin, and AST engine):
+
+```bash
 npm install -D flimsy-dev
+# or
+pnpm add -D flimsy-dev
 ```
 
-Add to your `vite.config.ts`:
+Register the plugin in `vite.config.ts`:
 
 ```ts
 import { defineConfig } from 'vite';
@@ -59,43 +74,45 @@ export default defineConfig({
 });
 ```
 
-Run your development server as usual:
+Start your normal Vite server:
 
 ```bash
-pnpm dev
+npm run dev
 ```
 
 ---
 
-## ⌨️ Shortcuts & Controls
+## Shortcuts & Studio Controls
 
-| Shortcut | Action |
+| Shortcut / Action | Behavior |
 |---|---|
-| **`Alt + X`** | Toggle Flimsy inspection mode on/off anywhere on the screen. |
-| **`Esc`** | Deselect active element or dismiss the studio panel. |
-| **Double Click** | Direct in-situ text editing directly on the web page element. |
-| **`Ctrl + Z` / `Cmd + Z`** | Undo last visual modification. |
-| **`Ctrl + Y` / `Cmd + Shift + Z`** | Redo last visual modification. |
+| `Alt + X` | Toggle visual inspection mode on or off anywhere on the page. |
+| `Esc` | Deselect active element, or close inspection mode when idle. |
+| `Double-Click` | Edit element text directly inline (`contentEditable`) on the live page. |
+| `Ctrl + Z` / `Cmd + Z` | Undo the last visual modification in your current session. |
+| `Ctrl + Y` / `Cmd + Shift + Z` | Redo a previously undone modification. |
+| Bottom Floating Pill | Switch inspect cursor, inline text tool, Layers tree, AI Assist, and Undo/Redo. |
 
 ---
 
-## 🛡️ Privacy & Local-First Guarantee
+## Privacy & Local-First Guarantee
 
-* **100% Local-First:** Your code stays strictly on your computer.
-* **Zero Telemetry:** Flimsy does not send analytics, telemetry, or tracking requests.
-* **Production-Safe:** Flimsy transforms only activate in Vite's development mode (`apply: 'serve'`). In production builds, zero bytes of Flimsy code or debug attributes are ever bundled.
+- **100% Local-First:** Source AST reads and writes happen strictly on your local machine.
+- **Zero Telemetry:** Flimsy makes zero external tracking, analytics, or network requests.
+- **Production-Safe:** The Vite plugin only runs during local development (`apply: 'serve'`). Running `vite build` bundles zero bytes of Flimsy runtime scripts or `data-flimsy-*` attributes.
 
 ---
 
-## 📦 Architecture
+## Architecture
 
 Published as one unified package (**[`flimsy-dev`](packages/cli)**) bundling:
-* **CLI Runner (`npx flimsy-dev dev`)** — Zero-config development launcher ([packages/cli](packages/cli)).
-* **Vite Plugin (`flimsy-dev/vite`)** — Development server plugin, Shadow DOM overlay, and update API ([packages/vite-plugin](packages/vite-plugin)).
-* **AST Sync Engine** — Location injector (`magic-string`), deterministic file reconciler (`recast`), and conflict solver ([packages/core](packages/core)).
+
+- **CLI Runner (`npx flimsy-dev dev`):** Zero-config development launcher ([`packages/cli`](packages/cli)).
+- **Vite Plugin (`flimsy-dev/vite`):** Development server plugin, Shadow DOM visual studio, and update API ([`packages/vite-plugin`](packages/vite-plugin)).
+- **AST Sync Engine:** JSX source coordinate injector (`magic-string`), deterministic file reconciler (`recast`), and external edit conflict guard ([`packages/core`](packages/core)).
 
 ---
 
-## 📄 License
+## License
 
-MIT © [kuroi17](https://github.com/kuroi17)
+MIT — [kuroi17](https://github.com/kuroi17)

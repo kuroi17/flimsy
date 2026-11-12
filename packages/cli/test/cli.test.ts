@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { execFile } from 'node:child_process';
+import fs from 'node:fs';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,6 +9,7 @@ import { injectSourceLocations, updateSourceFile } from '../src/index.js';
 
 const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf-8'));
 
 describe('flimsy CLI package exports', () => {
   it('correctly exports the Vite plugin and core utilities', () => {
@@ -29,7 +31,7 @@ describe('flimsy CLI package exports', () => {
   it('prints current version via CLI binary', async () => {
     const binPath = path.resolve(__dirname, '../bin/flimsy.js');
     const { stdout } = await execFileAsync(process.execPath, [binPath, '--version']);
-    expect(stdout).toContain('v0.1.2');
+    expect(stdout).toContain(`v${pkg.version}`);
   });
 });
 

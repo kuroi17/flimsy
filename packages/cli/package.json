@@ -1,6 +1,6 @@
 {
   "name": "flimsy-dev",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "description": "Direct visual-to-code synchronization tool for modern web development",
   "license": "MIT",
@@ -19,6 +19,7 @@
     "figma"
   ],
   "files": [
+    "assets",
     "bin",
     "dist",
     "README.md",

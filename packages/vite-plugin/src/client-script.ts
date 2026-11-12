@@ -7,6 +7,7 @@ export const clientScript = `
 
   // State
   let isInspectActive = false;
+  let isLayersOpen = true;
   let hoveredTarget = null;
   let selectedTarget = null;
   let originalClasses = '';
@@ -20,7 +21,6 @@ export const clientScript = `
   let historyIdx = -1;
 
   function pushHistory(classes, text) {
-    // Truncate redo states
     if (historyIdx < history.length - 1) {
       history = history.slice(0, historyIdx + 1);
     }
@@ -58,95 +58,154 @@ export const clientScript = `
     renderDiff();
   }
 
-  // Isolated Container
+  // Isolated Shadow DOM Root
   const container = document.createElement('div');
   container.id = 'flimsy-root';
   container.style.cssText = 'position:fixed; z-index:2147483647; pointer-events:none; top:0; left:0; width:100%; height:100%;';
   const shadow = container.attachShadow({ mode: 'open' });
   document.documentElement.appendChild(container);
 
-  // Modern Minimalist Dark Theme
+  // Light Frosted Cream Vellum Glass + Figma UI3 Minimalist Theme
   const style = document.createElement('style');
   style.textContent = \`
-    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 0; }
+    * {
+      box-sizing: border-box;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
 
-    /* Dock Button */
-    .dock-btn {
+    :host {
+      --glass-bg: rgba(253, 248, 235, 0.86);
+      --glass-well: rgba(235, 224, 196, 0.52);
+      --glass-hover: rgba(217, 178, 95, 0.16);
+      --glass-border: rgba(201, 154, 59, 0.36);
+      --glass-hairline: rgba(30, 27, 22, 0.08);
+      --ink-primary: #1e1b16;
+      --ink-secondary: #5e5444;
+      --ink-muted: #8a7f6b;
+      --gold: #d9b25f;
+      --gold-strong: #c69a3b;
+      --gold-tint: rgba(217, 178, 95, 0.24);
+      --glass-shadow: 0 18px 42px rgba(24, 19, 12, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.78);
+    }
+
+    /* Hide ugly scrollbars cleanly */
+    .no-scroll {
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    .no-scroll::-webkit-scrollbar { display: none; }
+
+    /* Bottom-Center Floating Glass Pill Dock */
+    .bottom-dock {
       position: fixed;
-      bottom: 20px;
-      right: 20px;
-      background: #090d16;
-      color: #94a3b8;
-      border: 1px solid #1e293b;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-      padding: 8px 16px;
+      bottom: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--glass-bg);
+      backdrop-filter: blur(22px) saturate(165%);
+      -webkit-backdrop-filter: blur(22px) saturate(165%);
+      border: 1px solid var(--glass-border);
+      box-shadow: var(--glass-shadow);
+      padding: 5px 6px;
       border-radius: 9999px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 3px;
       pointer-events: auto;
-      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
       user-select: none;
-    }
-    .dock-btn:hover {
-      background: #0f172a;
-      color: #f1f5f9;
-      transform: translateY(-1px);
-    }
-    .dock-btn.active {
-      background: #0284c7;
-      color: #ffffff;
-      border-color: #38bdf8;
-      box-shadow: 0 0 20px rgba(2, 132, 199, 0.4);
-    }
-    .indicator {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #64748b;
-      transition: all 0.2s;
-    }
-    .dock-btn.active .indicator {
-      background: #38bdf8;
-      box-shadow: 0 0 8px #38bdf8;
-    }
-    .kbd-badge {
-      font-size: 10px;
-      background: rgba(255,255,255,0.1);
-      padding: 2px 5px;
-      border-radius: 4px;
-      font-family: monospace;
-      color: #94a3b8;
-    }
-    .dock-btn.active .kbd-badge {
-      color: #ffffff;
-      background: rgba(0,0,0,0.25);
+      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
-    /* Bounding Box & Anchors */
+    .dock-tool {
+      position: relative;
+      background: transparent;
+      border: none;
+      color: var(--ink-secondary);
+      width: 34px;
+      height: 34px;
+      border-radius: 9999px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .dock-tool svg { width: 16px; height: 16px; }
+    .dock-tool:hover:not(:disabled) {
+      background: var(--glass-hover);
+      color: var(--ink-primary);
+    }
+    .dock-tool.active {
+      background: var(--gold);
+      color: #1e1b16;
+      box-shadow: 0 2px 10px rgba(201, 154, 59, 0.35);
+    }
+    .dock-tool:disabled {
+      opacity: 0.32;
+      cursor: not-allowed;
+    }
+    .dock-tool.brand-mark {
+      cursor: default;
+      opacity: 0.9;
+    }
+    .dock-tool.brand-mark:hover {
+      background: transparent;
+    }
+
+    /* Clean Hover Tooltip on Icon Buttons */
+    .dock-tool[data-tip]:hover::after {
+      content: attr(data-tip);
+      position: absolute;
+      bottom: calc(100% + 10px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1e1b16;
+      color: #fdf8eb;
+      font-size: 10px;
+      font-weight: 500;
+      padding: 4px 8px;
+      border-radius: 6px;
+      white-space: nowrap;
+      pointer-events: none;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+    }
+
+    .dock-divider {
+      width: 1px;
+      height: 18px;
+      background: var(--glass-hairline);
+      margin: 0 3px;
+    }
+    .dock-extra {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    /* Highlight Bounding Box & Anchors (Honey Gold) */
     .box-highlight {
       position: absolute;
-      border: 1.5px solid #0284c7;
-      background: rgba(2, 132, 199, 0.08);
+      border: 1.5px solid var(--gold-strong);
+      background: rgba(217, 178, 95, 0.08);
       pointer-events: none;
       display: none;
       z-index: 10;
-      border-radius: 2px;
+      border-radius: 3px;
     }
     .box-highlight.selected {
-      border: 2px solid #38bdf8;
-      background: rgba(56, 189, 248, 0.12);
+      border: 1.5px solid var(--gold-strong);
+      background: rgba(217, 178, 95, 0.13);
+      box-shadow: 0 0 0 1px rgba(255, 253, 247, 0.4);
     }
     .handle {
       position: absolute;
       width: 7px;
       height: 7px;
-      background: #ffffff;
-      border: 1.5px solid #38bdf8;
-      border-radius: 1px;
+      background: #fffdf7;
+      border: 1.5px solid var(--gold-strong);
+      border-radius: 1.5px;
       display: none;
     }
     .box-highlight.selected .handle { display: block; }
@@ -159,197 +218,249 @@ export const clientScript = `
       position: absolute;
       bottom: calc(100% + 6px);
       left: 0;
-      background: #0f172a;
-      color: #f8fafc;
+      background: rgba(253, 248, 235, 0.94);
+      backdrop-filter: blur(12px);
+      color: var(--ink-primary);
       font-size: 11px;
       font-weight: 600;
-      padding: 3px 8px;
+      padding: 2px 7px;
       border-radius: 6px;
       white-space: nowrap;
-      border: 1px solid #334155;
+      border: 1px solid var(--glass-border);
       display: flex;
       align-items: center;
       gap: 6px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      box-shadow: 0 4px 12px rgba(24, 19, 12, 0.14);
     }
-    .box-tooltip .tag-name { color: #38bdf8; font-family: monospace; }
-    .box-tooltip .loc { color: #94a3b8; font-family: monospace; font-size: 10px; }
+    .box-tooltip .tag-name { color: #8c6618; font-family: ui-monospace, SFMono-Regular, monospace; }
+    .box-tooltip .loc { color: var(--ink-muted); font-family: ui-monospace, SFMono-Regular, monospace; font-size: 10px; }
     .dim-pill {
       position: absolute;
-      top: calc(100% + 4px);
-      right: 0;
-      background: #0f172a;
-      color: #94a3b8;
+      top: calc(100% + 5px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--gold);
+      color: #1e1b16;
       font-size: 10px;
-      font-family: monospace;
-      padding: 2px 6px;
-      border-radius: 4px;
-      border: 1px solid #1e293b;
+      font-weight: 600;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      padding: 2px 7px;
+      border-radius: 5px;
       white-space: nowrap;
+      box-shadow: 0 3px 10px rgba(24, 19, 12, 0.16);
     }
 
-    /* Minimalist Inspector Studio */
-    .studio-panel {
-      position: fixed;
-      bottom: 75px;
-      right: 20px;
-      width: 330px;
-      max-height: 85vh;
-      overflow-y: auto;
-      background: #0b0f19;
-      border: 1px solid #1e293b;
-      border-radius: 12px;
-      box-shadow: 0 20px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06);
-      padding: 14px;
-      color: #f1f5f9;
+    /* Shared Glass Island Base */
+    .glass-card {
+      background: var(--glass-bg);
+      backdrop-filter: blur(24px) saturate(165%);
+      -webkit-backdrop-filter: blur(24px) saturate(165%);
+      border: 1px solid var(--glass-border);
+      border-radius: 14px;
+      box-shadow: var(--glass-shadow);
+      color: var(--ink-primary);
       pointer-events: auto;
+      animation: floatIn 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes floatIn {
+      from { opacity: 0; transform: translateY(4px) scale(0.99); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* Top-Left Floating Layers Tree */
+    .layers-panel {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      width: 204px;
+      max-height: calc(100vh - 104px);
+      overflow-y: auto;
+      padding: 10px;
       display: none;
       flex-direction: column;
-      gap: 12px;
-      animation: fadeIn 0.15s ease-out;
+      gap: 6px;
     }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(6px); }
-      to { opacity: 1; transform: translateY(0); }
+    .layers-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 4px 6px;
+      border-bottom: 1px solid var(--glass-hairline);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--ink-secondary);
+    }
+    .trail {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .trail-item {
+      cursor: pointer;
+      padding: 5px 8px;
+      border-radius: 7px;
+      font-size: 11px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      color: var(--ink-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.12s;
+    }
+    .trail-item:hover {
+      background: var(--glass-hover);
+      color: var(--ink-primary);
+    }
+    .trail-item.active {
+      background: var(--gold-tint);
+      color: var(--ink-primary);
+      font-weight: 600;
+    }
+    .trail-indent {
+      width: 6px;
+      height: 6px;
+      border-left: 1px solid var(--ink-muted);
+      border-bottom: 1px solid var(--ink-muted);
+      opacity: 0.45;
+      flex-shrink: 0;
+      margin-top: -3px;
     }
 
-    /* Studio Header */
+    /* Top-Right Floating Inspector Card */
+    .studio-panel {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      width: 288px;
+      max-height: calc(100vh - 96px);
+      overflow-y: auto;
+      padding: 12px;
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+    }
+
     .studio-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       padding-bottom: 8px;
-      border-bottom: 1px solid #1e293b;
+      border-bottom: 1px solid var(--glass-hairline);
+      gap: 8px;
     }
     .studio-header-left {
       display: flex;
-      flex-direction: column;
-      gap: 2px;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      flex: 1;
     }
     .studio-tag-badge {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-family: monospace;
-      font-size: 12px;
-      font-weight: 700;
-      color: #38bdf8;
-    }
-    .studio-loc-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 11px;
+      font-weight: 600;
+      color: #7c5910;
+      background: var(--gold-tint);
+      border: 1px solid rgba(201, 154, 59, 0.35);
+      padding: 2px 7px;
+      border-radius: 6px;
+      white-space: nowrap;
     }
     .studio-loc-badge {
       font-size: 10px;
-      color: #64748b;
-      font-family: monospace;
+      color: var(--ink-muted);
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .instance-badge {
-      font-size: 9px;
-      font-weight: 700;
-      padding: 1px 5px;
-      border-radius: 4px;
-      background: rgba(245, 158, 11, 0.15);
-      color: #fbbf24;
-      border: 1px solid rgba(245, 158, 11, 0.3);
+      font-size: 10px;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 9999px;
+      background: rgba(217, 178, 95, 0.25);
+      color: #7c5910;
+      border: 1px solid rgba(201, 154, 59, 0.4);
       display: none;
-    }
-    .header-actions {
-      display: flex;
-      align-items: center;
-      gap: 4px;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
     .icon-btn {
-      background: none;
+      background: transparent;
       border: none;
-      color: #64748b;
+      color: var(--ink-muted);
       cursor: pointer;
-      font-size: 14px;
       width: 24px;
       height: 24px;
-      border-radius: 4px;
+      border-radius: 6px;
       display: flex;
       align-items: center;
       justify-content: center;
+      flex-shrink: 0;
       transition: all 0.12s;
     }
+    .icon-btn svg { width: 13px; height: 13px; }
     .icon-btn:hover:not(:disabled) {
-      background: #1e293b;
-      color: #f1f5f9;
-    }
-    .icon-btn:disabled {
-      opacity: 0.3;
-      cursor: not-allowed;
+      background: var(--glass-hover);
+      color: var(--ink-primary);
     }
 
-    /* Compact Hierarchy Trail */
-    .trail {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      overflow-x: auto;
-      font-size: 11px;
-      color: #64748b;
-      padding-bottom: 2px;
-    }
-    .trail-item {
-      cursor: pointer;
-      padding: 1px 5px;
-      border-radius: 4px;
-      font-family: monospace;
-      white-space: nowrap;
-      transition: all 0.12s;
-    }
-    .trail-item:hover {
-      background: #1e293b;
-      color: #38bdf8;
-    }
-    .trail-item.active {
-      background: #0284c7;
-      color: #ffffff;
-      font-weight: 600;
-    }
-
-    /* Property Groups */
+    /* Minimal Property Rows */
     .prop-section {
       display: flex;
       flex-direction: column;
       gap: 5px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--glass-hairline);
+    }
+    .prop-section.no-divider {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .prop-row-inline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
     }
     .prop-label {
       font-size: 10px;
-      font-weight: 700;
-      color: #64748b;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+      font-weight: 600;
+      color: var(--ink-muted);
+      letter-spacing: 0.2px;
+      flex-shrink: 0;
     }
+
     .segmented {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
-      background: #0f172a;
-      border: 1px solid #1e293b;
-      border-radius: 6px;
+      background: var(--glass-well);
+      border-radius: 8px;
       padding: 2px;
       gap: 2px;
     }
     .seg-btn {
-      background: none;
+      background: transparent;
       border: none;
-      color: #94a3b8;
-      font-size: 11px;
-      font-weight: 600;
-      padding: 5px 0;
-      border-radius: 4px;
+      color: var(--ink-secondary);
+      font-size: 10.5px;
+      font-weight: 500;
+      padding: 4px 0;
+      border-radius: 6px;
       cursor: pointer;
       text-align: center;
       transition: all 0.12s;
     }
-    .seg-btn:hover { color: #f1f5f9; }
+    .seg-btn:hover { color: var(--ink-primary); }
     .seg-btn.active {
-      background: #1e293b;
-      color: #38bdf8;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      background: #fffdf7;
+      color: var(--ink-primary);
+      font-weight: 600;
+      box-shadow: 0 1px 3px rgba(30, 27, 22, 0.12);
     }
 
     /* Swatches */
@@ -360,151 +471,232 @@ export const clientScript = `
       flex-wrap: wrap;
     }
     .swatch {
-      width: 22px;
-      height: 22px;
+      width: 19px;
+      height: 19px;
       border-radius: 50%;
-      border: 1.5px solid rgba(255,255,255,0.15);
+      border: 1.5px solid rgba(30, 27, 22, 0.18);
       cursor: pointer;
-      transition: all 0.15s;
+      transition: transform 0.15s, border-color 0.15s;
     }
     .swatch:hover {
-      transform: scale(1.15);
-      border-color: #38bdf8;
-    }
-    .swatch.active {
-      border: 2px solid #38bdf8;
-      box-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
+      transform: scale(1.14);
+      border-color: var(--gold-strong);
     }
 
     .clean-input {
-      background: #0f172a;
-      border: 1px solid #1e293b;
-      border-radius: 6px;
-      padding: 6px 10px;
-      color: #ffffff;
-      font-size: 12px;
+      background: rgba(255, 253, 247, 0.78);
+      border: 1px solid rgba(30, 27, 22, 0.12);
+      border-radius: 8px;
+      padding: 5px 9px;
+      color: var(--ink-primary);
+      font-size: 11.5px;
       outline: none;
       width: 100%;
-      transition: border-color 0.15s;
+      transition: border-color 0.15s, background 0.15s;
     }
-    .clean-input:focus { border-color: #38bdf8; }
+    .clean-input::placeholder { color: var(--ink-muted); }
+    .clean-input:focus {
+      border-color: var(--gold-strong);
+      background: #fffdf7;
+    }
 
-    /* Diff Review Drawer */
-    .diff-container {
-      background: #090d16;
-      border: 1px solid #1e293b;
-      border-radius: 6px;
-      padding: 8px;
-      font-family: monospace;
-      font-size: 11px;
+    /* Compact Collapsible Drawers */
+    .drawer-pills {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+    }
+    .pill-toggle {
+      background: var(--glass-well);
+      border: 1px solid transparent;
+      color: var(--ink-secondary);
+      font-size: 10.5px;
+      font-weight: 500;
+      padding: 4px 9px;
+      border-radius: 7px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.12s;
+    }
+    .pill-toggle svg { width: 11px; height: 11px; }
+    .pill-toggle:hover { color: var(--ink-primary); background: var(--glass-hover); }
+    .pill-toggle.active {
+      background: var(--gold-tint);
+      border-color: rgba(201, 154, 59, 0.35);
+      color: var(--ink-primary);
+      font-weight: 600;
+    }
+
+    .ai-drawer {
       display: none;
       flex-direction: column;
-      gap: 4px;
-      max-height: 120px;
-      overflow-y: auto;
+      gap: 6px;
+      background: rgba(255, 253, 247, 0.55);
+      border: 1px solid var(--glass-hairline);
+      padding: 8px;
+      border-radius: 9px;
     }
-    .diff-del {
-      color: #f87171;
-      background: rgba(239, 68, 68, 0.1);
-      padding: 2px 4px;
-      border-radius: 3px;
-      word-break: break-all;
-    }
-    .diff-add {
-      color: #4ade80;
-      background: rgba(34, 197, 94, 0.1);
-      padding: 2px 4px;
-      border-radius: 3px;
-      word-break: break-all;
-    }
-
-    /* Actions */
     .ai-chip {
-      background: #0f172a;
-      border: 1px solid #1e293b;
-      color: #94a3b8;
-      border-radius: 4px;
-      padding: 3px 6px;
+      background: rgba(255, 253, 247, 0.8);
+      border: 1px solid rgba(30, 27, 22, 0.1);
+      color: var(--ink-secondary);
+      border-radius: 5px;
+      padding: 2px 7px;
       font-size: 10px;
+      font-weight: 500;
       cursor: pointer;
       transition: all 0.12s;
     }
     .ai-chip:hover {
-      background: #1e293b;
-      color: #38bdf8;
-      border-color: #38bdf8;
+      background: var(--gold-tint);
+      color: var(--ink-primary);
+      border-color: var(--gold-strong);
     }
+
+    .diff-container {
+      background: rgba(255, 253, 247, 0.72);
+      border: 1px solid var(--glass-hairline);
+      border-radius: 8px;
+      padding: 7px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 10.5px;
+      display: none;
+      flex-direction: column;
+      gap: 3px;
+      max-height: 92px;
+      overflow-y: auto;
+    }
+    .diff-del {
+      color: #991b1b;
+      background: rgba(220, 38, 38, 0.08);
+      padding: 2px 5px;
+      border-radius: 4px;
+      word-break: break-all;
+    }
+    .diff-add {
+      color: #166534;
+      background: rgba(22, 163, 74, 0.1);
+      padding: 2px 5px;
+      border-radius: 4px;
+      word-break: break-all;
+    }
+
     .action-btn {
-      background: #0284c7;
-      color: white;
+      background: var(--gold);
+      color: #1e1b16;
       border: none;
-      border-radius: 6px;
-      padding: 6px 12px;
-      font-size: 12px;
+      border-radius: 7px;
+      padding: 5px 10px;
+      font-size: 11px;
       font-weight: 600;
       cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
       transition: background 0.15s;
     }
-    .action-btn:hover {
-      background: #0369a1;
-    }
+    .action-btn:hover { background: var(--gold-strong); }
+
     .sync-row {
       display: flex;
       gap: 6px;
       align-items: center;
-      margin-top: 4px;
+      padding-top: 2px;
     }
     .sync-btn {
       flex: 1;
-      background: #0284c7;
-      color: #ffffff;
-      border: none;
-      border-radius: 8px;
-      padding: 9px;
-      font-size: 12px;
-      font-weight: 700;
+      background: var(--glass-well);
+      color: var(--ink-secondary);
+      border: 1px solid rgba(30, 27, 22, 0.08);
+      border-radius: 9px;
+      padding: 8px 12px;
+      font-size: 11.5px;
+      font-weight: 600;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 6px;
       transition: all 0.15s;
-      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);
     }
-    .sync-btn:hover { background: #0369a1; }
+    .sync-btn.dirty {
+      background: var(--gold);
+      color: #1e1b16;
+      border-color: var(--gold-strong);
+      box-shadow: 0 4px 12px rgba(201, 154, 59, 0.3);
+    }
+    .sync-btn.dirty:hover { background: var(--gold-strong); }
     .sync-btn:disabled { opacity: 0.6; cursor: not-allowed; }
     .discard-btn {
-      background: #1e293b;
-      color: #94a3b8;
-      border: 1px solid #334155;
-      border-radius: 8px;
-      padding: 9px 12px;
+      background: transparent;
+      color: var(--ink-secondary);
+      border: 1px solid var(--glass-hairline);
+      border-radius: 9px;
+      padding: 8px 10px;
       font-size: 11px;
-      font-weight: 600;
+      font-weight: 500;
       cursor: pointer;
       transition: all 0.12s;
     }
     .discard-btn:hover {
-      background: #334155;
-      color: #f1f5f9;
+      background: var(--glass-hover);
+      color: var(--ink-primary);
     }
     .sync-status {
-      font-size: 11px;
-      color: #4ade80;
+      font-size: 10.5px;
+      color: #166534;
       text-align: center;
       display: none;
-      padding: 4px;
+      padding-top: 2px;
+      font-weight: 500;
     }
   \`;
   shadow.appendChild(style);
 
-  // Dock button
-  const dockBtn = document.createElement('button');
-  dockBtn.className = 'dock-btn';
-  dockBtn.innerHTML = '<span class="indicator"></span><span>Flimsy</span><span class="kbd-badge">Alt+X</span>';
-  shadow.appendChild(dockBtn);
+  // Bottom-Center Floating Glass Pill Dock (Icon-only with hover tooltips)
+  const dock = document.createElement('div');
+  dock.className = 'bottom-dock';
+  dock.innerHTML = \`
+    <button class="dock-tool dock-btn" data-tip="Inspect (Alt+X)" aria-label="Toggle Inspect">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 4 7.07 17 2.51-7.39L21 11.07z"/></svg>
+    </button>
+    <div class="dock-extra" id="flimsy-dock-extra" style="display:none;">
+      <button class="dock-tool" id="flimsy-text-tool" data-tip="Edit Text" aria-label="Edit Text">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
+      </button>
+      <button class="dock-tool active" id="flimsy-layers-toggle" data-tip="Layers" aria-label="Toggle Layers">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+      </button>
+      <div class="dock-divider"></div>
+      <button class="dock-tool" id="flimsy-undo-btn" data-tip="Undo (Ctrl+Z)" aria-label="Undo" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+      </button>
+      <button class="dock-tool" id="flimsy-redo-btn" data-tip="Redo (Ctrl+Y)" aria-label="Redo" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/></svg>
+      </button>
+      <button class="dock-tool" id="flimsy-dock-ai-btn" data-tip="AI Assist" aria-label="AI Assist">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg>
+      </button>
+    </div>
+    <div class="dock-divider"></div>
+    <span class="dock-tool brand-mark" data-tip="Flimsy Visual Sync">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#c69a3b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5 14.5 4 20 11.5 9.5 19Z" fill="rgba(253, 246, 223, 0.9)"/><path d="M14.5 4c-.8 4.2 1.2 6.8 5.5 7.5" fill="rgba(217, 178, 95, 0.45)"/></svg>
+    </span>
+  \`;
+  shadow.appendChild(dock);
 
-  // Highlight Box with Figma Handles
+  const dockBtn = dock.querySelector('.dock-btn');
+  const dockExtra = dock.querySelector('#flimsy-dock-extra');
+  const textToolBtn = dock.querySelector('#flimsy-text-tool');
+  const layersToggleBtn = dock.querySelector('#flimsy-layers-toggle');
+  const undoBtn = dock.querySelector('#flimsy-undo-btn');
+  const redoBtn = dock.querySelector('#flimsy-redo-btn');
+  const dockAiBtn = dock.querySelector('#flimsy-dock-ai-btn');
+
+  // Highlight Box with Handles
   const highlightBox = document.createElement('div');
   highlightBox.className = 'box-highlight';
   highlightBox.innerHTML = \`
@@ -524,59 +716,65 @@ export const clientScript = `
   const locSpan = highlightBox.querySelector('.loc');
   const dimPillSpan = highlightBox.querySelector('.dim-pill');
 
-  // Minimal Studio Panel
+  // Left Floating Layers Card (Auto-opens on element selection)
+  const layersPanel = document.createElement('div');
+  layersPanel.className = 'glass-card layers-panel no-scroll';
+  layersPanel.id = 'flimsy-layers-panel';
+  layersPanel.innerHTML = \`
+    <div class="layers-header">
+      <span>Layers</span>
+      <button class="icon-btn" id="flimsy-layers-close" title="Hide Layers">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+    <div class="trail" id="flimsy-trail"></div>
+  \`;
+  shadow.appendChild(layersPanel);
+
+  const trailContainer = layersPanel.querySelector('#flimsy-trail');
+  const layersCloseBtn = layersPanel.querySelector('#flimsy-layers-close');
+
+  // Right Floating Inspector Card
   const panel = document.createElement('div');
-  panel.className = 'studio-panel';
+  panel.className = 'glass-card studio-panel no-scroll';
   panel.innerHTML = \`
     <div class="studio-header">
       <div class="studio-header-left">
-        <div class="studio-tag-badge">
-          <span id="flimsy-elem-tag">&lt;button&gt;</span>
-        </div>
-        <div class="studio-loc-row">
-          <span class="studio-loc-badge" id="flimsy-elem-loc">src/Hero.tsx:16</span>
-          <span class="instance-badge" id="flimsy-instance-badge"></span>
-        </div>
+        <span class="studio-tag-badge" id="flimsy-elem-tag">&lt;button&gt;</span>
+        <span class="studio-loc-badge" id="flimsy-elem-loc">Hero.tsx:16</span>
+        <span class="instance-badge" id="flimsy-instance-badge"></span>
       </div>
-      <div class="header-actions">
-        <button class="icon-btn" id="flimsy-undo-btn" title="Undo (Ctrl+Z)" disabled>↶</button>
-        <button class="icon-btn" id="flimsy-redo-btn" title="Redo (Ctrl+Y)" disabled>↷</button>
-        <button class="icon-btn" id="flimsy-close-btn" title="Close (Esc)">&times;</button>
-      </div>
+      <button class="icon-btn" id="flimsy-close-btn" title="Close (Esc)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
     </div>
 
-    <div class="prop-section">
-      <div class="trail" id="flimsy-trail"></div>
-    </div>
-
-    <!-- Text Edit -->
     <div class="prop-section" id="flimsy-text-group">
-      <div class="prop-label">Text Content (Double-click to edit)</div>
-      <input type="text" id="flimsy-text-input" class="clean-input" placeholder="Text content...">
+      <div class="prop-row-inline">
+        <span class="prop-label">Text</span>
+        <input type="text" id="flimsy-text-input" class="clean-input" placeholder="Double-click on page...">
+      </div>
     </div>
 
-    <!-- Typography -->
     <div class="prop-section">
-      <div class="prop-label">Typography</div>
+      <span class="prop-label">Typography</span>
       <div class="segmented" id="seg-font-size">
         <button class="seg-btn" data-class="text-xs">xs</button>
         <button class="seg-btn" data-class="text-sm">sm</button>
-        <button class="seg-btn" data-class="text-base">base</button>
+        <button class="seg-btn" data-class="text-base">md</button>
         <button class="seg-btn" data-class="text-lg">lg</button>
         <button class="seg-btn" data-class="text-xl">xl</button>
-        <button class="seg-btn" data-class="text-2xl">2xl</button>
       </div>
-      <div class="segmented" id="seg-font-weight" style="margin-top:4px;">
-        <button class="seg-btn" data-class="font-normal">Regular</button>
-        <button class="seg-btn" data-class="font-medium">Medium</button>
+      <div class="segmented" id="seg-font-weight">
+        <button class="seg-btn" data-class="font-normal">Reg</button>
+        <button class="seg-btn" data-class="font-medium">Med</button>
         <button class="seg-btn" data-class="font-semibold">Semi</button>
         <button class="seg-btn" data-class="font-bold">Bold</button>
       </div>
     </div>
 
-    <!-- Spacing & Radius -->
     <div class="prop-section">
-      <div class="prop-label">Padding & Radius</div>
+      <span class="prop-label">Spacing</span>
       <div class="segmented" id="seg-padding">
         <button class="seg-btn" data-class="p-0">p-0</button>
         <button class="seg-btn" data-class="p-2">p-2</button>
@@ -584,32 +782,33 @@ export const clientScript = `
         <button class="seg-btn" data-class="p-6">p-6</button>
         <button class="seg-btn" data-class="p-8">p-8</button>
       </div>
-      <div class="segmented" id="seg-radius" style="margin-top:4px;">
-        <button class="seg-btn" data-class="rounded-none">Square</button>
+      <div class="segmented" id="seg-radius">
+        <button class="seg-btn" data-class="rounded-none">0</button>
         <button class="seg-btn" data-class="rounded-md">md</button>
         <button class="seg-btn" data-class="rounded-lg">lg</button>
         <button class="seg-btn" data-class="rounded-xl">xl</button>
-        <button class="seg-btn" data-class="rounded-full">Pill</button>
+        <button class="seg-btn" data-class="rounded-full">Full</button>
       </div>
     </div>
 
-    <!-- Color Palette -->
     <div class="prop-section">
-      <div class="prop-label">Color Theme</div>
-      <div class="swatches" id="color-swatches">
-        <div class="swatch" data-classes="bg-transparent text-slate-100" style="background:transparent; border-style:dashed;" title="Transparent"></div>
-        <div class="swatch" data-classes="bg-slate-800 text-white" style="background:#1e293b;" title="Slate"></div>
-        <div class="swatch" data-classes="bg-sky-500 text-white" style="background:#0ea5e9;" title="Sky"></div>
-        <div class="swatch" data-classes="bg-emerald-500 text-white" style="background:#10b981;" title="Emerald"></div>
-        <div class="swatch" data-classes="bg-indigo-600 text-white" style="background:#4f46e5;" title="Indigo"></div>
-        <div class="swatch" data-classes="bg-rose-500 text-white" style="background:#f43f5e;" title="Rose"></div>
-        <div class="swatch" data-classes="bg-white text-slate-900" style="background:#ffffff;" title="White"></div>
+      <div class="prop-row-inline">
+        <span class="prop-label">Theme</span>
+        <div class="swatches" id="color-swatches">
+          <div class="swatch" data-classes="bg-transparent text-stone-800" style="background:transparent; border-style:dashed;" title="Transparent"></div>
+          <div class="swatch" data-classes="bg-amber-50 text-stone-900" style="background:#fdf6df;" title="Cream"></div>
+          <div class="swatch" data-classes="bg-amber-400 text-stone-950" style="background:#d9b25f;" title="Gold"></div>
+          <div class="swatch" data-classes="bg-stone-900 text-amber-50" style="background:#1e1b16;" title="Charcoal"></div>
+          <div class="swatch" data-classes="bg-sky-500 text-white" style="background:#0ea5e9;" title="Sky"></div>
+          <div class="swatch" data-classes="bg-emerald-500 text-white" style="background:#10b981;" title="Emerald"></div>
+          <div class="swatch" data-classes="bg-rose-500 text-white" style="background:#f43f5e;" title="Rose"></div>
+          <div class="swatch" data-classes="bg-white text-slate-900" style="background:#ffffff;" title="White"></div>
+        </div>
       </div>
     </div>
 
-    <!-- Layout & Flex -->
     <div class="prop-section">
-      <div class="prop-label">Layout</div>
+      <span class="prop-label">Layout</span>
       <div class="segmented" id="seg-layout">
         <button class="seg-btn" data-class="flex-row">Row</button>
         <button class="seg-btn" data-class="flex-col">Col</button>
@@ -619,13 +818,16 @@ export const clientScript = `
       </div>
     </div>
 
-    <!-- AI Assist (Optional) -->
-    <div class="prop-section">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <span class="prop-label">AI Assist (Optional)</span>
-        <button id="flimsy-ai-toggle" style="background:none; border:none; color:#38bdf8; font-size:10px; cursor:pointer; font-weight:600;">✨ Open</button>
+    <div class="prop-section no-divider">
+      <div class="drawer-pills">
+        <button class="pill-toggle" id="flimsy-ai-toggle">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg>
+          AI Assist
+        </button>
+        <button class="pill-toggle" id="flimsy-classes-toggle">Classes</button>
       </div>
-      <div id="flimsy-ai-drawer" style="display:none; flex-direction:column; gap:6px; background:#070a12; border:1px solid #1e293b; padding:8px; border-radius:8px;">
+
+      <div id="flimsy-ai-drawer" class="ai-drawer">
         <input type="text" id="flimsy-ai-input" class="clean-input" placeholder="e.g. Glassmorphism, Neon glow...">
         <div style="display:flex; gap:4px; flex-wrap:wrap;">
           <button class="ai-chip" data-prompt="Glassmorphism card with blur">Glass</button>
@@ -633,25 +835,25 @@ export const clientScript = `
           <button class="ai-chip" data-prompt="Neon glow shadow">Glow</button>
           <button class="ai-chip" data-prompt="Modern rounded card with shadow">Card</button>
         </div>
-        <div style="display:flex; gap:6px; margin-top:2px;">
-          <button id="flimsy-ai-generate" class="action-btn" style="flex:1; padding:6px; font-size:11px;">Apply AI Style</button>
-          <button id="flimsy-ai-copy" class="action-btn" style="background:#1e293b; color:#94a3b8; border:1px solid #334155; padding:6px 8px; font-size:11px;" title="Copy prompt for Claude Code or Cursor">📋 Copy</button>
+        <div style="display:flex; gap:5px; margin-top:2px;">
+          <button id="flimsy-ai-generate" class="action-btn" style="flex:1;">Apply AI Style</button>
+          <button id="flimsy-ai-copy" class="pill-toggle" title="Copy prompt for Claude Code or Cursor">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy
+          </button>
         </div>
-        <div id="flimsy-ai-feedback" style="font-size:10px; color:#38bdf8; display:none;"></div>
+        <div id="flimsy-ai-feedback" style="font-size:10px; color:#7c5910; display:none;"></div>
+      </div>
+
+      <div id="flimsy-classes-drawer" style="display:none;">
+        <input type="text" id="flimsy-classes-raw" class="clean-input" placeholder="Tailwind classes...">
       </div>
     </div>
 
-    <!-- Raw Classes input -->
-    <div class="prop-section">
-      <div class="prop-label">Tailwind Classes</div>
-      <input type="text" id="flimsy-classes-raw" class="clean-input" placeholder="Tailwind classes...">
-    </div>
-
-    <!-- Diff Preview Drawer -->
-    <div id="flimsy-diff-box" class="diff-container"></div>
+    <div id="flimsy-diff-box" class="diff-container no-scroll"></div>
 
     <div class="sync-row">
-      <button id="flimsy-sync-btn" class="sync-btn">Sync to Code</button>
+      <button id="flimsy-sync-btn" class="sync-btn">No Changes</button>
       <button id="flimsy-discard-btn" class="discard-btn" title="Discard pending changes">Reset</button>
     </div>
     <div id="flimsy-sync-status" class="sync-status"></div>
@@ -661,11 +863,10 @@ export const clientScript = `
   const elemTagDisplay = panel.querySelector('#flimsy-elem-tag');
   const elemLocDisplay = panel.querySelector('#flimsy-elem-loc');
   const instanceBadge = panel.querySelector('#flimsy-instance-badge');
-  const undoBtn = panel.querySelector('#flimsy-undo-btn');
-  const redoBtn = panel.querySelector('#flimsy-redo-btn');
-  const trailContainer = panel.querySelector('#flimsy-trail');
   const textInput = panel.querySelector('#flimsy-text-input');
   const classesRawInput = panel.querySelector('#flimsy-classes-raw');
+  const classesToggle = panel.querySelector('#flimsy-classes-toggle');
+  const classesDrawer = panel.querySelector('#flimsy-classes-drawer');
   const diffBox = panel.querySelector('#flimsy-diff-box');
   const syncBtn = panel.querySelector('#flimsy-sync-btn');
   const discardBtn = panel.querySelector('#flimsy-discard-btn');
@@ -691,12 +892,17 @@ export const clientScript = `
 
     if (pendingClasses !== originalClasses) {
       hasDiff = true;
+      const oldSet = originalClasses.split(/\\s+/).filter(Boolean);
+      const newSet = pendingClasses.split(/\\s+/).filter(Boolean);
+      const removed = oldSet.filter((c) => !newSet.includes(c));
+      const added = newSet.filter((c) => !oldSet.includes(c));
+
       const delLine = document.createElement('div');
       delLine.className = 'diff-del';
-      delLine.textContent = '- class: ' + (originalClasses || '(none)');
+      delLine.textContent = '- ' + (removed.length ? removed.join(' ') : (originalClasses || '(none)'));
       const addLine = document.createElement('div');
       addLine.className = 'diff-add';
-      addLine.textContent = '+ class: ' + pendingClasses;
+      addLine.textContent = '+ ' + (added.length ? added.join(' ') : (pendingClasses || '(none)'));
       diffBox.appendChild(delLine);
       diffBox.appendChild(addLine);
     }
@@ -714,6 +920,7 @@ export const clientScript = `
     }
 
     diffBox.style.display = hasDiff ? 'flex' : 'none';
+    syncBtn.classList.toggle('dirty', hasDiff);
     syncBtn.textContent = hasDiff ? 'Sync to Code' : 'No Changes';
   }
 
@@ -776,13 +983,20 @@ export const clientScript = `
     });
   }
 
+  function syncLayersVisibility() {
+    layersToggleBtn.classList.toggle('active', isLayersOpen);
+    layersPanel.style.display = (isInspectActive && selectedTarget && isLayersOpen) ? 'flex' : 'none';
+  }
+
   function toggleInspect(force) {
     isInspectActive = typeof force === 'boolean' ? force : !isInspectActive;
     dockBtn.classList.toggle('active', isInspectActive);
+    dockExtra.style.display = isInspectActive ? 'flex' : 'none';
     if (!isInspectActive) {
       highlightBox.style.display = 'none';
       highlightBox.classList.remove('selected');
       panel.style.display = 'none';
+      layersPanel.style.display = 'none';
       if (selectedTarget) {
         selectedTarget.contentEditable = 'false';
       }
@@ -791,9 +1005,45 @@ export const clientScript = `
     }
   }
 
+  function toggleAIDrawer(force) {
+    const isHidden = aiDrawer.style.display === 'none' || !aiDrawer.style.display;
+    const nextOpen = typeof force === 'boolean' ? force : isHidden;
+    aiDrawer.style.display = nextOpen ? 'flex' : 'none';
+    aiToggle.classList.toggle('active', nextOpen);
+    dockAiBtn.classList.toggle('active', nextOpen);
+    if (nextOpen) aiInput.focus();
+  }
+
   dockBtn.addEventListener('click', () => toggleInspect());
   undoBtn.addEventListener('click', () => undo());
   redoBtn.addEventListener('click', () => redo());
+
+  layersToggleBtn.addEventListener('click', () => {
+    isLayersOpen = !isLayersOpen;
+    syncLayersVisibility();
+  });
+
+  layersCloseBtn.addEventListener('click', () => {
+    isLayersOpen = false;
+    syncLayersVisibility();
+  });
+
+  textToolBtn.addEventListener('click', () => {
+    if (!selectedTarget) return;
+    selectedTarget.contentEditable = 'true';
+    selectedTarget.focus();
+  });
+
+  dockAiBtn.addEventListener('click', () => {
+    if (!selectedTarget) return;
+    toggleAIDrawer();
+  });
+
+  classesToggle.addEventListener('click', () => {
+    const isHidden = classesDrawer.style.display === 'none' || !classesDrawer.style.display;
+    classesDrawer.style.display = isHidden ? 'block' : 'none';
+    classesToggle.classList.toggle('active', isHidden);
+  });
 
   // Global Keys (Alt+X, Esc, Ctrl+Z, Ctrl+Y)
   window.addEventListener('keydown', (e) => {
@@ -806,6 +1056,7 @@ export const clientScript = `
         selectedTarget = null;
         highlightBox.classList.remove('selected');
         panel.style.display = 'none';
+        layersPanel.style.display = 'none';
       } else if (isInspectActive) {
         toggleInspect(false);
       }
@@ -827,6 +1078,7 @@ export const clientScript = `
     selectedTarget = null;
     highlightBox.classList.remove('selected');
     panel.style.display = 'none';
+    layersPanel.style.display = 'none';
   });
 
   function findTaggedElement(el) {
@@ -858,7 +1110,7 @@ export const clientScript = `
 
     tagNameSpan.textContent = '<' + name + '>';
     locSpan.textContent = file.split('/').pop() + ':' + line;
-    dimPillSpan.textContent = Math.round(rect.width) + ' × ' + Math.round(rect.height) + ' px';
+    dimPillSpan.textContent = Math.round(rect.width) + ' x ' + Math.round(rect.height);
   }
 
   function buildTrail(target) {
@@ -871,11 +1123,19 @@ export const clientScript = `
     }
 
     chain.forEach((el, idx) => {
-      const item = document.createElement('span');
+      const item = document.createElement('div');
       item.className = 'trail-item' + (el === target ? ' active' : '');
+      item.style.paddingLeft = (8 + idx * 10) + 'px';
       const elName = el.getAttribute('data-flimsy-name') || el.tagName.toLowerCase();
       const elComp = el.getAttribute('data-flimsy-comp');
-      item.textContent = (elComp ? elComp + ':' : '') + '<' + elName + '>';
+      if (idx > 0) {
+        const indent = document.createElement('span');
+        indent.className = 'trail-indent';
+        item.appendChild(indent);
+      }
+      const label = document.createElement('span');
+      label.textContent = (elComp ? elComp + ':' : '') + '<' + elName + '>';
+      item.appendChild(label);
       item.addEventListener('click', () => selectElement(el));
       trailContainer.appendChild(item);
     });
@@ -902,7 +1162,6 @@ export const clientScript = `
     pendingText = null;
     pendingClasses = originalClasses;
 
-    // Reset history stack for newly selected element
     history = [{ classes: originalClasses, text: originalText }];
     historyIdx = 0;
     updateUndoRedoUI();
@@ -914,12 +1173,13 @@ export const clientScript = `
     const name = target.getAttribute('data-flimsy-name') || target.tagName.toLowerCase();
 
     elemTagDisplay.textContent = '<' + name + '>';
-    elemLocDisplay.textContent = file + ':' + line;
+    elemLocDisplay.textContent = file.split('/').pop() + ':' + line;
+    elemLocDisplay.title = file + ':' + line;
 
-    // Check multiple instances on page
     const matchingElements = document.querySelectorAll('[data-flimsy-file="' + file + '"]');
     if (matchingElements.length > 1) {
-      instanceBadge.textContent = '⚠️ ' + matchingElements.length + ' instances on page';
+      instanceBadge.textContent = matchingElements.length + 'x';
+      instanceBadge.title = matchingElements.length + ' instances on page';
       instanceBadge.style.display = 'inline-block';
     } else {
       instanceBadge.style.display = 'none';
@@ -939,6 +1199,7 @@ export const clientScript = `
     syncStatus.style.display = 'none';
     syncBtn.disabled = false;
     panel.style.display = 'flex';
+    syncLayersVisibility();
   }
 
   // Hover detection
@@ -1011,11 +1272,6 @@ export const clientScript = `
     else if (hoveredTarget) updateHighlightBox(hoveredTarget, false);
   }, { passive: true });
 
-  window.addEventListener('resize', () => {
-    if (selectedTarget) updateHighlightBox(selectedTarget, true);
-    else if (hoveredTarget) updateHighlightBox(hoveredTarget, false);
-  }, { passive: true });
-
   // Text input sync
   textInput.addEventListener('input', () => {
     if (!selectedTarget) return;
@@ -1048,17 +1304,15 @@ export const clientScript = `
     swatch.addEventListener('click', () => {
       const classesToAdd = swatch.getAttribute('data-classes');
       if (classesToAdd) {
-        classesToAdd.split(' ').forEach((c) => applyOptimisticClass(c));
+        const tokens = classesToAdd.split(' ').filter(Boolean);
+        tokens.forEach((c) => applyOptimisticClass(c, true));
+        pushHistory(pendingClasses, pendingText);
       }
     });
   });
 
   // AI Assist Controls (Optional)
-  aiToggle.addEventListener('click', () => {
-    const isHidden = aiDrawer.style.display === 'none' || !aiDrawer.style.display;
-    aiDrawer.style.display = isHidden ? 'flex' : 'none';
-    aiToggle.textContent = isHidden ? '✕ Close' : '✨ Open';
-  });
+  aiToggle.addEventListener('click', () => toggleAIDrawer());
 
   panel.querySelectorAll('.ai-chip').forEach((chip) => {
     chip.addEventListener('click', () => {
@@ -1098,7 +1352,7 @@ export const clientScript = `
           }
         }
         currentAICopyPrompt = data.copyPrompt || '';
-        aiFeedback.textContent = '✨ ' + (data.suggestion?.explanation || 'Applied.');
+        aiFeedback.textContent = 'Applied: ' + (data.suggestion?.explanation || 'Done.');
       } else {
         aiFeedback.textContent = 'Error: ' + (data.error || 'Failed');
       }
@@ -1137,7 +1391,7 @@ export const clientScript = `
     try {
       await navigator.clipboard.writeText(textToCopy);
       aiFeedback.style.display = 'block';
-      aiFeedback.textContent = '📋 Context & prompt copied to clipboard!';
+      aiFeedback.textContent = 'Context & prompt copied to clipboard.';
       setTimeout(() => { aiFeedback.style.display = 'none'; }, 2000);
     } catch {
       aiFeedback.style.display = 'block';
@@ -1161,7 +1415,7 @@ export const clientScript = `
     updateUndoRedoUI();
     renderDiff();
     syncStatus.style.display = 'block';
-    syncStatus.style.color = '#94a3b8';
+    syncStatus.style.color = '#5e5444';
     syncStatus.textContent = 'Changes reset.';
     setTimeout(() => { syncStatus.style.display = 'none'; }, 1200);
   });
@@ -1184,7 +1438,7 @@ export const clientScript = `
 
     if (actions.length === 0) {
       syncStatus.style.display = 'block';
-      syncStatus.style.color = '#94a3b8';
+      syncStatus.style.color = '#5e5444';
       syncStatus.textContent = 'No pending modifications.';
       return;
     }
@@ -1208,9 +1462,9 @@ export const clientScript = `
       const data = await res.json();
       if (data.success) {
         syncStatus.style.display = 'block';
-        syncStatus.style.color = '#4ade80';
-        syncStatus.textContent = '✓ Synced to ' + file.split('/').pop() + '!';
-        syncBtn.textContent = '✓ Synced';
+        syncStatus.style.color = '#166534';
+        syncStatus.textContent = 'Synced to ' + file.split('/').pop();
+        syncBtn.textContent = 'Synced';
         originalClasses = pendingClasses;
         originalText = pendingText !== null ? pendingText : originalText;
         fileMtime = data.mtime || fileMtime;
@@ -1221,14 +1475,13 @@ export const clientScript = `
         setTimeout(() => {
           syncBtn.textContent = 'No Changes';
           syncBtn.disabled = false;
-        }, 1500);
+        }, 1400);
       } else if (data.conflict) {
         syncStatus.style.display = 'block';
-        syncStatus.style.color = '#fbbf24';
-        syncStatus.textContent = '⚠️ ' + data.error;
+        syncStatus.style.color = '#b45309';
+        syncStatus.textContent = 'Conflict: ' + data.error;
         syncBtn.textContent = 'Force Overwrite';
         syncBtn.disabled = false;
-        // Clicking again will force overwrite
         const onForce = async () => {
           syncBtn.removeEventListener('click', onForce);
           await fetch('/__flimsy/api/update', {
@@ -1236,19 +1489,19 @@ export const clientScript = `
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ file, line, col, actions, force: true }),
           });
-          syncBtn.textContent = '✓ Overwritten';
+          syncBtn.textContent = 'Overwritten';
         };
         syncBtn.addEventListener('click', onForce, { once: true });
       } else {
         syncStatus.style.display = 'block';
-        syncStatus.style.color = '#f87171';
+        syncStatus.style.color = '#991b1b';
         syncStatus.textContent = 'Error: ' + (data.error || 'Sync failed');
         syncBtn.textContent = 'Retry Sync';
         syncBtn.disabled = false;
       }
     } catch (err) {
       syncStatus.style.display = 'block';
-      syncStatus.style.color = '#f87171';
+      syncStatus.style.color = '#991b1b';
       syncStatus.textContent = 'Network error syncing.';
       syncBtn.textContent = 'Retry Sync';
       syncBtn.disabled = false;
