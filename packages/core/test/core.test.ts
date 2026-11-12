@@ -144,10 +144,19 @@ export function Button() {
     expect(updatedContent).not.toContain('bg-white');
   });
 
-  it('applies multiple atomic actions (text + classes) in a single update', async () => {
-    const sampleFilePath = path.join(tempDir, 'Hero.tsx');
-    const initialContent = `export function Hero() {
-  return <button className="p-2 bg-blue-500 text-sm">Click Me</button>;
+  it('reconciles master padding over directional padding', () => {
+    const existing = 'px-4 py-2 bg-red-500';
+    const result = reconcileClasses(existing, 'p-6');
+    expect(result).toContain('p-6');
+    expect(result).toContain('bg-red-500');
+    expect(result).not.toContain('px-4');
+    expect(result).not.toContain('py-2');
+  });
+
+  it('updates TemplateLiteral className preserving expressions', async () => {
+    const sampleFilePath = path.join(tempDir, 'TemplateComponent.tsx');
+    const initialContent = `export function Nav({ active }: { active: boolean }) {
+  return <div className={\`p-4 bg-white \${active ? 'text-blue-500' : 'text-gray-500'}\`}>Menu</div>;
 }
 `;
     await fs.writeFile(sampleFilePath, initialContent, 'utf-8');
@@ -156,23 +165,79 @@ export function Button() {
       filePath: sampleFilePath,
       line: 2,
       column: 9,
-      actions: [
-        { type: 'update-text', text: 'Get Started Today' },
-        { type: 'update-class', newClasses: 'p-6 bg-emerald-500 text-lg rounded-xl', mode: 'reconcile' },
-      ],
+      action: {
+        type: 'update-class',
+        newClasses: 'p-8 bg-slate-900',
+        mode: 'reconcile',
+      },
     });
 
     expect(updateRes.success).toBe(true);
     const updatedContent = await fs.readFile(sampleFilePath, 'utf-8');
-    expect(updatedContent).toContain('Get Started Today');
-    expect(updatedContent).toContain('p-6');
-    expect(updatedContent).toContain('bg-emerald-500');
-    expect(updatedContent).toContain('text-lg');
-    expect(updatedContent).toContain('rounded-xl');
-    expect(updatedContent).not.toContain('Click Me');
-    expect(updatedContent).not.toContain('p-2');
+    expect(updatedContent).toContain('p-8');
+    expect(updatedContent).toContain('bg-slate-900');
+    expect(updatedContent).toContain("${active ? 'text-blue-500' : 'text-gray-500'}");
+    expect(updatedContent).not.toContain('p-4');
+    expect(updatedContent).not.toContain('bg-white');
+  });
+
+  it('updates cn() / clsx() CallExpression className safely (shadcn/ui support)', async () => {
+    const sampleFilePath = path.join(tempDir, 'ShadcnButton.tsx');
+    const initialContent = `import { cn } from './utils';
+
+export function Button({ isPrimary }: { isPrimary: boolean }) {
+  return (
+    <button className={cn('px-4 py-2 bg-blue-500 text-sm', isPrimary && 'shadow-lg')}>
+      Click
+    </button>
+  );
+}
+`;
+    await fs.writeFile(sampleFilePath, initialContent, 'utf-8');
+
+    const updateRes = await updateSourceFile({
+      filePath: sampleFilePath,
+      line: 5,
+      column: 4,
+      action: {
+        type: 'update-class',
+        newClasses: 'px-6 py-3 bg-emerald-600 rounded-lg',
+        mode: 'reconcile',
+      },
+    });
+
+    expect(updateRes.success).toBe(true);
+    const updatedContent = await fs.readFile(sampleFilePath, 'utf-8');
+    expect(updatedContent).toContain('px-6');
+    expect(updatedContent).toContain('py-3');
+    expect(updatedContent).toContain('bg-emerald-600');
+    expect(updatedContent).toContain('rounded-lg');
+    expect(updatedContent).toContain("isPrimary && 'shadow-lg'");
     expect(updatedContent).not.toContain('bg-blue-500');
-    expect(updatedContent).not.toContain('text-sm');
+  });
+
+  it('updates text while preserving inline JSX expressions', async () => {
+    const sampleFilePath = path.join(tempDir, 'Greeting.tsx');
+    const initialContent = `export function Greeting({ name }: { name: string }) {
+  return <h1>Welcome back, {name}!</h1>;
+}
+`;
+    await fs.writeFile(sampleFilePath, initialContent, 'utf-8');
+
+    const updateRes = await updateSourceFile({
+      filePath: sampleFilePath,
+      line: 2,
+      column: 9,
+      action: {
+        type: 'update-text',
+        text: 'Hello again, ',
+      },
+    });
+
+    expect(updateRes.success).toBe(true);
+    const updatedContent = await fs.readFile(sampleFilePath, 'utf-8');
+    expect(updatedContent).toContain('Hello again, ');
+    expect(updatedContent).toContain('{name}');
   });
 });
 

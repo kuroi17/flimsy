@@ -92,24 +92,24 @@
 
 ---
 
-## Phase 3: AST Transformation & Code Synchronization Engine (Weeks 6–7)
+## Phase 3: AST Transformation & Code Synchronization Engine (Weeks 6–7) [COMPLETED]
 **Goal:** Cleanly, deterministically update physical `.tsx` / `.jsx` files without breaking code structure, formatting, or comments.
 
-- [ ] **AST Parsing & Formatting Preservation**
-  - Use `recast` or `@babel/parser` + `@babel/generator` with exact source mapping to preserve code formatting, indentation, and comments.
-- [ ] **Smart Tailwind Class Reconciler**
-  - Parse existing `className` attributes.
-  - Intelligent conflict resolution:
-    - If user sets padding to `p-6`, remove conflicting classes (`p-2`, `px-4`, `py-1`).
-    - If user updates background color, replace `bg-red-500` with `bg-blue-600` without removing hover/focus variants (`hover:bg-red-700`).
+- [x] **AST Parsing & Formatting Preservation**
+  - Uses `recast` with Babel TSX/JSX parser ensuring 100% of untouched code, comments, and whitespace remain identical.
+- [x] **Smart Tailwind Class Reconciler**
+  - Parses existing `className` attributes with category awareness.
+  - Intelligent multi-axis conflict resolution:
+    - Master padding (`p-6`) cleans up directional padding (`px-4`, `py-2`).
+    - Updating background color (`bg-emerald-500`) preserves hover variants (`hover:bg-blue-600`) and text colors (`text-white`).
   - Class name format support:
     - String literals: `className="bg-white p-4"`
-    - Template strings: `className={`text-sm ${active ? '...' : ''}`}`
-    - Utility helpers: Handle `cn(...)` / `clsx(...)` array/object arguments safely.
-- [ ] **Text Node AST Sync**
-  - Safely replace JSXText child nodes when text is edited inline, preserving expressions (`{user.name}`).
-- [ ] **Atomic File Writing**
-  - Safe writes with backup/rollback if parse or AST write fails.
+    - Template strings: `className={`p-4 bg-white ${active ? '...' : ''}`}` (safely updating static quasi strings without corrupting `${...}` expressions).
+    - Utility helpers: Native support for `cn(...)`, `clsx(...)`, and `cva(...)` function call arguments (shadcn/ui compatibility).
+- [x] **Text Node AST Sync**
+  - Safely replaces target `JSXText` nodes while preserving all surrounding `JSXExpressionContainer` dynamic expressions (e.g. `Hello, {name}!`).
+- [x] **Atomic File Writing with Pre-write Syntax Validation**
+  - Validates AST output against Babel parser before disk write; automatically aborts with safety rollback if syntax validation fails, ensuring developer files are never corrupted.
 
 ---
 

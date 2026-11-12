@@ -118,6 +118,20 @@ export async function updateSourceFile(
     };
   }
 
+  // Pre-write Safety Validation: Verify syntax before touching disk
+  try {
+    babelParser.parse(newCode, {
+      sourceType: 'module',
+      plugins: ['jsx', 'typescript'],
+    });
+  } catch (validationErr: any) {
+    return {
+      success: false,
+      filePath: resolvedPath,
+      error: `Safety abort: Generated code failed syntax validation (${validationErr.message}). Original file was preserved.`,
+    };
+  }
+
   try {
     await fs.writeFile(resolvedPath, newCode, 'utf-8');
   } catch (err: any) {
@@ -184,18 +198,50 @@ function applyAction(
         if (classAttr.value.extra) {
           classAttr.value.extra.raw = JSON.stringify(updated);
         }
-      } else if (
-        classAttr.value?.type === 'JSXExpressionContainer' &&
-        classAttr.value.expression?.type === 'StringLiteral'
-      ) {
-        const existingClasses = classAttr.value.expression.value || '';
-        const updated = reconcileClasses(
-          existingClasses,
-          action.newClasses,
-          action.removeClasses,
-          action.mode
-        );
-        classAttr.value.expression.value = updated;
+      } else if (classAttr.value?.type === 'JSXExpressionContainer') {
+        const expr = classAttr.value.expression;
+
+        // StringLiteral inside container: className={'...'}
+        if (expr?.type === 'StringLiteral') {
+          const existingClasses = expr.value || '';
+          const updated = reconcileClasses(
+            existingClasses,
+            action.newClasses,
+            action.removeClasses,
+            action.mode
+          );
+          expr.value = updated;
+        }
+        // TemplateLiteral: className={`p-4 bg-white ${active ? '...' : ''}`}
+        else if (expr?.type === 'TemplateLiteral' && expr.quasis?.length > 0) {
+          const firstQuasi = expr.quasis[0];
+          const existingClasses = firstQuasi.value.raw || '';
+          const updated = reconcileClasses(
+            existingClasses,
+            action.newClasses,
+            action.removeClasses,
+            action.mode
+          );
+          firstQuasi.value.raw = updated ? (updated + ' ') : '';
+          firstQuasi.value.cooked = firstQuasi.value.raw;
+        }
+        // CallExpression: className={cn('p-4 bg-white', isSpecial && '...')}
+        else if (expr?.type === 'CallExpression' && expr.arguments?.length > 0) {
+          const firstArg = expr.arguments[0];
+          if (firstArg.type === 'StringLiteral') {
+            const existingClasses = firstArg.value || '';
+            const updated = reconcileClasses(
+              existingClasses,
+              action.newClasses,
+              action.removeClasses,
+              action.mode
+            );
+            firstArg.value = updated;
+            if (firstArg.extra) {
+              firstArg.extra.raw = JSON.stringify(updated);
+            }
+          }
+        }
       }
     } else {
       // Add new className attribute
@@ -237,9 +283,17 @@ export function reconcileClasses(
     for (const newClass of newTokens) {
       const prefix = getTailwindPropertyPrefix(newClass);
       if (prefix) {
-        filtered = filtered.filter(
-          (token) => getTailwindPropertyPrefix(token) !== prefix
-        );
+        const isMasterPadding = /^([^:]+:)?p-/.test(prefix) && !/^([^:]+:)?p[xytrbl]-/.test(prefix);
+        const isMasterMargin = /^([^:]+:)?m-/.test(prefix) && !/^([^:]+:)?m[xytrbl]-/.test(prefix);
+
+        filtered = filtered.filter((token) => {
+          const tokenPrefix = getTailwindPropertyPrefix(token);
+          if (!tokenPrefix) return true;
+          if (tokenPrefix === prefix) return false;
+          if (isMasterPadding && /^([^:]+:)?p[xytrbl]-/.test(tokenPrefix)) return false;
+          if (isMasterMargin && /^([^:]+:)?m[xytrbl]-/.test(tokenPrefix)) return false;
+          return true;
+        });
       }
       filtered.push(newClass);
     }
