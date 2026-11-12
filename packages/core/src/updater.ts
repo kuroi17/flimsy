@@ -98,8 +98,14 @@ export async function updateSourceFile(
     };
   }
 
-  // Apply action
-  applyAction(targetElementNode, targetOpeningNode, options.action);
+  // Apply action(s)
+  if (options.actions && Array.isArray(options.actions)) {
+    for (const act of options.actions) {
+      applyAction(targetElementNode, targetOpeningNode, act);
+    }
+  } else if (options.action) {
+    applyAction(targetElementNode, targetOpeningNode, options.action);
+  }
 
   let newCode: string;
   try {
@@ -251,16 +257,61 @@ export function reconcileClasses(
 }
 
 /**
- * Helper to identify conflicting Tailwind utility prefixes
+ * Helper to identify conflicting Tailwind utility prefixes with category awareness
  */
-function getTailwindPropertyPrefix(cls: string): string | null {
-  // Strip variants like hover:, focus:, md:
+export function getTailwindPropertyPrefix(cls: string): string | null {
   const parts = cls.split(':');
   const base = parts[parts.length - 1];
+  const variantPrefix = parts.slice(0, -1).join(':');
 
-  const prefixes = [
+  const withVariant = (cat: string) => (variantPrefix ? `${variantPrefix}:${cat}` : cat);
+
+  // 1. Text alignments
+  if (/^text-(left|center|right|justify|start|end)$/.test(base)) {
+    return withVariant('text-align');
+  }
+
+  // 2. Font sizes
+  if (/^text-([0-9]?xl|xs|sm|base|lg)$/.test(base)) {
+    return withVariant('font-size');
+  }
+
+  // 3. Text colors (e.g. text-white, text-sky-400, text-transparent)
+  if (base.startsWith('text-')) {
+    return withVariant('text-color');
+  }
+
+  // 4. Font weights
+  if (/^font-(thin|extralight|light|normal|medium|semibold|bold|extrabold|black)$/.test(base)) {
+    return withVariant('font-weight');
+  }
+
+  // 5. Border radius
+  if (/^rounded(-none|-sm|-md|-lg|-xl|-2xl|-3xl|-full)?$/.test(base)) {
+    return withVariant('border-radius');
+  }
+
+  // 6. Box shadow
+  if (/^shadow(-none|-sm|-md|-lg|-xl|-2xl|inner)?$/.test(base)) {
+    return withVariant('box-shadow');
+  }
+
+  // 7. Flex direction
+  if (/^flex-(row|col|row-reverse|col-reverse)$/.test(base)) {
+    return withVariant('flex-direction');
+  }
+
+  // 8. Align items & Justify content
+  if (/^items-(start|center|end|baseline|stretch)$/.test(base)) {
+    return withVariant('align-items');
+  }
+  if (/^justify-(start|center|end|between|around|evenly|normal)$/.test(base)) {
+    return withVariant('justify-content');
+  }
+
+  // 9. Standard utility prefixes
+  const standardPrefixes = [
     'bg-',
-    'text-',
     'p-',
     'px-',
     'py-',
@@ -275,24 +326,22 @@ function getTailwindPropertyPrefix(cls: string): string | null {
     'mr-',
     'mb-',
     'ml-',
-    'rounded',
     'w-',
     'h-',
-    'flex-',
-    'justify-',
-    'items-',
     'gap-',
-    'border',
-    'shadow',
+    'border-',
     'opacity-',
   ];
 
-  for (const p of prefixes) {
+  for (const p of standardPrefixes) {
     if (base.startsWith(p)) {
-      // Include any variant prefix so `hover:bg-blue-500` replaces `hover:bg-red-500`
-      const variantPrefix = parts.slice(0, -1).join(':');
-      return variantPrefix ? `${variantPrefix}:${p}` : p;
+      return withVariant(p);
     }
+  }
+
+  // Base border toggle
+  if (base === 'border') {
+    return withVariant('border-width');
   }
 
   return null;

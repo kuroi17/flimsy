@@ -14,7 +14,8 @@ export interface UpdateSourceOptions {
   filePath: string;
   line: number;
   column: number;
-  action: UpdateAction;
+  action?: UpdateAction;
+  actions?: UpdateAction[];
   rootDir?: string;
 }
 

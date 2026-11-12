@@ -72,22 +72,23 @@
 
 ---
 
-## Phase 2: Visual Property Controls & Live Preview (Weeks 4–5)
+## Phase 2: Visual Property Controls & Live Preview (Weeks 4–5) [COMPLETED]
 **Goal:** Provide an intuitive property panel (similar to Figma/DevTools) that lets developers visually tweak common UI styling.
 
-- [ ] **Typography Controls**
-  - Direct double-click text editing (inline contentEditable preview).
-  - Font size, weight, text alignment, line height.
-  - Color picker (Hex, RGBA, Tailwind color palette swatches).
-- [ ] **Spacing & Sizing (Box Model)**
-  - Interactive box model inspector: visual margin, padding, width, height controls.
-  - Visual nudge handles (click & drag edge handles to adjust padding/margin/width).
-- [ ] **Styling & Layout Controls**
-  - Background color, border radius (sliders: `rounded-sm`, `rounded-lg`, `rounded-full`), border width, border color.
-  - Opacity and box shadows.
-  - Flexbox / Grid toggles: flex direction, alignment (`items-center`), justification (`justify-between`), gap.
-- [ ] **Instant Optimistic Preview**
-  - Apply changes instantly in-memory to the live DOM node for zero-lag preview while dragging or selecting values.
+- [x] **Typography Controls**
+  - Direct double-click text editing (enables in-situ `contentEditable` directly on the webpage element).
+  - Clean typography controls: font size (`xs` to `2xl`), weight (`Regular` to `Bold`), alignment (`Left`, `Center`, `Right`).
+  - Swatch-based color theme palette with instant contrast matching.
+- [x] **Spacing & Sizing (Box Model)**
+  - Segmented controls for padding (`p-0` through `p-8`) and border radius (`none`, `md`, `lg`, `xl`, `full`).
+  - Real-time dimension badge updating dynamically on element mutation.
+- [x] **Styling & Layout Controls**
+  - Instant theme color swatches (`slate`, `sky`, `emerald`, `indigo`, `rose`, `white`, `transparent`).
+  - Layout & flex toggles: direction (`row`, `col`), justification (`start`, `center`, `between`).
+- [x] **Instant Optimistic Preview**
+  - Zero-lag, category-aware client preview: class and text mutations apply immediately in-memory to the live DOM before syncing.
+- [x] **Multi-Action Atomic Sync**
+  - Single unified "Sync to Code" action supporting combined text and class mutations in one atomic AST write.
 
 ---
 

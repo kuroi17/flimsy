@@ -60,6 +60,19 @@ describe('@flimsy/core: reconcileClasses', () => {
     expect(result).not.toContain('bg-red-500');
     expect(result).not.toContain('rounded-md');
   });
+
+  it('disambiguates text color, font size, and text alignment without collision', () => {
+    const existing = 'text-white text-base text-left font-medium bg-slate-900';
+    const result = reconcileClasses(existing, 'text-xl text-center bg-sky-500');
+    expect(result).toContain('text-white'); // text color preserved!
+    expect(result).toContain('text-xl'); // font size replaced
+    expect(result).not.toContain('text-base');
+    expect(result).toContain('text-center'); // text align replaced
+    expect(result).not.toContain('text-left');
+    expect(result).toContain('font-medium'); // font weight preserved
+    expect(result).toContain('bg-sky-500'); // bg color replaced
+    expect(result).not.toContain('bg-slate-900');
+  });
 });
 
 describe('@flimsy/core: updateSourceFile', () => {
@@ -129,6 +142,37 @@ export function Button() {
     expect(updatedContent).toContain('shadow-xl');
     expect(updatedContent).not.toContain('p-4');
     expect(updatedContent).not.toContain('bg-white');
+  });
+
+  it('applies multiple atomic actions (text + classes) in a single update', async () => {
+    const sampleFilePath = path.join(tempDir, 'Hero.tsx');
+    const initialContent = `export function Hero() {
+  return <button className="p-2 bg-blue-500 text-sm">Click Me</button>;
+}
+`;
+    await fs.writeFile(sampleFilePath, initialContent, 'utf-8');
+
+    const updateRes = await updateSourceFile({
+      filePath: sampleFilePath,
+      line: 2,
+      column: 9,
+      actions: [
+        { type: 'update-text', text: 'Get Started Today' },
+        { type: 'update-class', newClasses: 'p-6 bg-emerald-500 text-lg rounded-xl', mode: 'reconcile' },
+      ],
+    });
+
+    expect(updateRes.success).toBe(true);
+    const updatedContent = await fs.readFile(sampleFilePath, 'utf-8');
+    expect(updatedContent).toContain('Get Started Today');
+    expect(updatedContent).toContain('p-6');
+    expect(updatedContent).toContain('bg-emerald-500');
+    expect(updatedContent).toContain('text-lg');
+    expect(updatedContent).toContain('rounded-xl');
+    expect(updatedContent).not.toContain('Click Me');
+    expect(updatedContent).not.toContain('p-2');
+    expect(updatedContent).not.toContain('bg-blue-500');
+    expect(updatedContent).not.toContain('text-sm');
   });
 });
 

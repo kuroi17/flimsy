@@ -27,12 +27,16 @@ describe('Vite Plugin Round-trip Integration', () => {
   });
 
   afterAll(async () => {
-    if (server) {
-      await server.close();
-    }
     if (originalHeroContent) {
       // Restore original file
       await fs.writeFile(heroFilePath, originalHeroContent, 'utf-8');
+    }
+    if (server) {
+      server.httpServer?.closeAllConnections?.();
+      await Promise.race([
+        server.close(),
+        new Promise((resolve) => setTimeout(resolve, 500)),
+      ]);
     }
   });
 
@@ -43,17 +47,17 @@ describe('Vite Plugin Round-trip Integration', () => {
     expect(html).toContain('/@flimsy/client.js');
   });
 
-  it('serves client overlay script with Shadow DOM and breadcrumb inspector', async () => {
+  it('serves client overlay script with modern property controls and optimistic preview', async () => {
     const res = await fetch(`${serverUrl}/@flimsy/client.js`);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('application/javascript');
     const script = await res.text();
-    expect(script).toContain('Flimsy Inspector');
-    expect(script).toContain('attachShadow({ mode: \'open\' })');
-    expect(script).toContain('Alt+X');
-    expect(script).toContain('flimsy-breadcrumbs');
-    expect(script).toContain('flimsy-comp-name');
-    expect(script).toContain('handle-tl');
+    expect(script).toContain('Visual Property Controls active');
+    expect(script).toContain('seg-font-size');
+    expect(script).toContain('seg-padding');
+    expect(script).toContain('color-swatches');
+    expect(script).toContain('applyOptimisticClass');
+    expect(script).toContain('contentEditable');
   });
 
   it('transforms TSX module and stamps data-flimsy-* coordinates with component context', async () => {
@@ -77,7 +81,7 @@ describe('Vite Plugin Round-trip Integration', () => {
     const line = parseInt(lineMatch![1], 10);
     const col = parseInt(lineMatch![2], 10);
 
-    // Call update API
+    // Call update API with multiple atomic actions
     const updateRes = await fetch(`${serverUrl}/__flimsy/api/update`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -85,10 +89,17 @@ describe('Vite Plugin Round-trip Integration', () => {
         file: 'src/components/Hero.tsx',
         line,
         col,
-        action: {
-          type: 'update-text',
-          text: 'Synced By Flimsy PoC',
-        },
+        actions: [
+          {
+            type: 'update-text',
+            text: 'Live Studio Verified',
+          },
+          {
+            type: 'update-class',
+            newClasses: 'px-8 py-4 bg-emerald-500 rounded-xl text-lg font-bold',
+            mode: 'reconcile',
+          },
+        ],
       }),
     });
 
@@ -98,6 +109,8 @@ describe('Vite Plugin Round-trip Integration', () => {
 
     // Verify physical file on disk was modified
     const updatedDiskContent = await fs.readFile(heroFilePath, 'utf-8');
-    expect(updatedDiskContent).toContain('Synced By Flimsy PoC');
+    expect(updatedDiskContent).toContain('Live Studio Verified');
+    expect(updatedDiskContent).toContain('bg-emerald-500');
+    expect(updatedDiskContent).toContain('rounded-xl');
   });
 });

@@ -57,6 +57,7 @@ export function flimsy(options: FlimsyOptions = {}): Plugin {
                 line: Number(data.line),
                 column: Number(data.col || 0),
                 action: data.action,
+                actions: data.actions,
                 rootDir: root,
               });
 
