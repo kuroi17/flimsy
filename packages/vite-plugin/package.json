@@ -1,6 +1,7 @@
 {
   "name": "flimsy-vite",
   "version": "0.1.0",
+  "private": true,
   "type": "module",
   "description": "Vite dev server plugin for Flimsy visual-to-code synchronization",
   "license": "MIT",

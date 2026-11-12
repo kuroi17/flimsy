@@ -1,6 +1,7 @@
 {
   "name": "flimsy-core",
   "version": "0.1.0",
+  "private": true,
   "type": "module",
   "description": "Core AST parser, JSX location coordinate injector, and file reconciler for Flimsy",
   "license": "MIT",

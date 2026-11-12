@@ -87,11 +87,12 @@ pnpm dev
 
 ---
 
-## 📦 Packages in Monorepo
+## 📦 Architecture
 
-* **[`flimsy-dev`](packages/cli)**: Main CLI runner and package exports (`npx flimsy-dev dev`).
-* **[`flimsy-vite`](packages/vite-plugin)**: Vite development server plugin, overlay injector, and dev update API.
-* **[`flimsy-core`](packages/core)**: AST location injector (`magic-string`), deterministic file reconciler (`recast`), and conflict solver.
+Published as one unified package (**[`flimsy-dev`](packages/cli)**) bundling:
+* **CLI Runner (`npx flimsy-dev dev`)** — Zero-config development launcher ([packages/cli](packages/cli)).
+* **Vite Plugin (`flimsy-dev/vite`)** — Development server plugin, Shadow DOM overlay, and update API ([packages/vite-plugin](packages/vite-plugin)).
+* **AST Sync Engine** — Location injector (`magic-string`), deterministic file reconciler (`recast`), and conflict solver ([packages/core](packages/core)).
 
 ---
 

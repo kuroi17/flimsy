@@ -1,6 +1,6 @@
 {
   "name": "flimsy-dev",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Direct visual-to-code synchronization tool for modern web development",
   "license": "MIT",
@@ -9,7 +9,15 @@
     "type": "git",
     "url": "https://github.com/kuroi17/flimsy.git"
   },
-  "keywords": ["vite", "visual-editor", "tailwind", "react", "dx", "ast", "figma"],
+  "keywords": [
+    "vite",
+    "visual-editor",
+    "tailwind",
+    "react",
+    "dx",
+    "ast",
+    "figma"
+  ],
   "files": [
     "bin",
     "dist",
@@ -33,17 +41,25 @@
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "node build.mjs",
     "test": "vitest run"
   },
   "dependencies": {
-    "flimsy-core": "workspace:*",
-    "flimsy-vite": "workspace:*"
+    "@babel/parser": "^7.26.9",
+    "@babel/traverse": "^7.26.9",
+    "@babel/types": "^7.26.9",
+    "magic-string": "^0.30.17",
+    "recast": "^0.23.9"
+  },
+  "peerDependencies": {
+    "vite": "^5.0.0 || ^6.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.13.4",
+    "esbuild": "^0.28.2",
+    "flimsy-core": "workspace:*",
+    "flimsy-vite": "workspace:*",
     "typescript": "^5.7.3",
     "vitest": "^3.0.5"
   }
 }
-

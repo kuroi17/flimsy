@@ -2,7 +2,7 @@
 import { parseArgs } from 'node:util';
 import path from 'node:path';
 import fs from 'node:fs';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 console.log('\x1b[36m%s\x1b[0m', '⚡ Flimsy: Direct UI changes synced to codebase.');
 
@@ -22,11 +22,11 @@ const { values, positionals } = parseArgs({
 
 if (values.version) {
   try {
-    const pkgPath = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1')), '../package.json');
+    const pkgPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../package.json');
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
     console.log(`v${pkg.version}`);
   } catch {
-    console.log('v0.1.0');
+    console.log('v0.1.1');
   }
   process.exit(0);
 }

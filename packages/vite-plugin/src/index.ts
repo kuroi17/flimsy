@@ -1,7 +1,12 @@
 import type { Plugin } from 'vite';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { injectSourceLocations, updateSourceFile } from 'flimsy-core';
+import {
+  injectSourceLocations,
+  updateSourceFile,
+  extractAIElementContext,
+  resolveDesignHeuristic,
+} from 'flimsy-core';
 import { clientScript } from './client-script.js';
 
 export interface FlimsyOptions {
@@ -79,7 +84,6 @@ export function flimsy(options: FlimsyOptions = {}): Plugin {
           req.on('end', async () => {
             try {
               const data = JSON.parse(body);
-              const { extractAIElementContext, resolveDesignHeuristic } = await import('flimsy-core');
               const context = await extractAIElementContext({
                 filePath: data.file,
                 line: Number(data.line),
