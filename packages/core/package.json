@@ -2,6 +2,17 @@
   "name": "@flimsy/core",
   "version": "0.1.0",
   "type": "module",
+  "description": "Core AST parser, JSX location coordinate injector, and file reconciler for Flimsy",
+  "license": "MIT",
+  "author": "kuroi17",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kuroi17/flimsy.git"
+  },
+  "keywords": ["ast", "recast", "babel", "tailwind-reconciler", "jsx", "tsx"],
+  "files": [
+    "dist"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
