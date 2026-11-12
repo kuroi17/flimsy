@@ -81,7 +81,7 @@ if (command === 'dev') {
 
     const port = values.port ? parseInt(values.port, 10) : undefined;
     const server = await createServer({
-      configFile: true,
+      root: cwd,
       server: {
         port,
         host: values.host ? true : undefined,
