@@ -7,7 +7,7 @@
   "author": "kuroi17",
   "repository": {
     "type": "git",
-    "url": "https://github.com/kuroi17/flimsy.git"
+    "url": "git+https://github.com/kuroi17/flimsy.git"
   },
   "keywords": [
     "vite",
@@ -26,8 +26,8 @@
     "LICENSE"
   ],
   "bin": {
-    "flimsy-dev": "./bin/flimsy.js",
-    "flimsy": "./bin/flimsy.js"
+    "flimsy-dev": "bin/flimsy.js",
+    "flimsy": "bin/flimsy.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
