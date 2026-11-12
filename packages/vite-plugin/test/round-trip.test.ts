@@ -47,17 +47,26 @@ describe('Vite Plugin Round-trip Integration', () => {
     expect(html).toContain('/@flimsy/client.js');
   });
 
-  it('serves client overlay script with modern property controls and optimistic preview', async () => {
+  it('serves client overlay script with modern property controls, undo/redo, and diff review', async () => {
     const res = await fetch(`${serverUrl}/@flimsy/client.js`);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('application/javascript');
     const script = await res.text();
-    expect(script).toContain('Visual Property Controls active');
-    expect(script).toContain('seg-font-size');
-    expect(script).toContain('seg-padding');
-    expect(script).toContain('color-swatches');
-    expect(script).toContain('applyOptimisticClass');
+    expect(script).toContain('Studio active');
+    expect(script).toContain('flimsy-undo-btn');
+    expect(script).toContain('flimsy-redo-btn');
+    expect(script).toContain('flimsy-diff-box');
+    expect(script).toContain('flimsy-instance-badge');
+    expect(script).toContain('flimsy-discard-btn');
     expect(script).toContain('contentEditable');
+  });
+
+  it('inspects file metadata at /__flimsy/api/inspect', async () => {
+    const res = await fetch(`${serverUrl}/__flimsy/api/inspect?file=src/components/Hero.tsx`);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.success).toBe(true);
+    expect(typeof data.mtime).toBe('number');
   });
 
   it('transforms TSX module and stamps data-flimsy-* coordinates with component context', async () => {

@@ -3,7 +3,7 @@ export const clientScript = `
   if (window.__FLIMSY_INITIALIZED__) return;
   window.__FLIMSY_INITIALIZED__ = true;
 
-  console.log('[Flimsy] Visual Property Controls active. Alt+X to toggle inspect.');
+  console.log('[Flimsy] Studio active. Alt+X to toggle inspect. Ctrl+Z to undo.');
 
   // State
   let isInspectActive = false;
@@ -13,6 +13,50 @@ export const clientScript = `
   let originalText = '';
   let pendingText = null;
   let pendingClasses = '';
+  let fileMtime = 0;
+
+  // History buffer for Undo/Redo
+  let history = [];
+  let historyIdx = -1;
+
+  function pushHistory(classes, text) {
+    // Truncate redo states
+    if (historyIdx < history.length - 1) {
+      history = history.slice(0, historyIdx + 1);
+    }
+    history.push({ classes, text });
+    historyIdx = history.length - 1;
+    updateUndoRedoUI();
+    renderDiff();
+  }
+
+  function undo() {
+    if (historyIdx > 0 && selectedTarget) {
+      historyIdx--;
+      applyHistoryState(history[historyIdx]);
+    }
+  }
+
+  function redo() {
+    if (historyIdx < history.length - 1 && selectedTarget) {
+      historyIdx++;
+      applyHistoryState(history[historyIdx]);
+    }
+  }
+
+  function applyHistoryState(state) {
+    if (!selectedTarget) return;
+    pendingClasses = state.classes;
+    pendingText = state.text;
+    selectedTarget.className = pendingClasses;
+    selectedTarget.innerText = pendingText !== null ? pendingText : originalText;
+    textInput.value = pendingText !== null ? pendingText : originalText;
+    classesRawInput.value = pendingClasses;
+    updateActiveSegmentedUI(pendingClasses);
+    updateHighlightBox(selectedTarget, true);
+    updateUndoRedoUI();
+    renderDiff();
+  }
 
   // Isolated Container
   const container = document.createElement('div');
@@ -149,7 +193,7 @@ export const clientScript = `
       position: fixed;
       bottom: 75px;
       right: 20px;
-      width: 320px;
+      width: 330px;
       max-height: 85vh;
       overflow-y: auto;
       background: #0b0f19;
@@ -177,6 +221,11 @@ export const clientScript = `
       padding-bottom: 8px;
       border-bottom: 1px solid #1e293b;
     }
+    .studio-header-left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
     .studio-tag-badge {
       display: flex;
       align-items: center;
@@ -186,24 +235,52 @@ export const clientScript = `
       font-weight: 700;
       color: #38bdf8;
     }
+    .studio-loc-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
     .studio-loc-badge {
       font-size: 10px;
       color: #64748b;
       font-family: monospace;
     }
-    .close-btn {
+    .instance-badge {
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      display: none;
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .icon-btn {
       background: none;
       border: none;
       color: #64748b;
       cursor: pointer;
-      font-size: 16px;
-      padding: 2px 6px;
+      font-size: 14px;
+      width: 24px;
+      height: 24px;
       border-radius: 4px;
-      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.12s;
     }
-    .close-btn:hover {
+    .icon-btn:hover:not(:disabled) {
       background: #1e293b;
       color: #f1f5f9;
+    }
+    .icon-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
     }
 
     /* Compact Hierarchy Trail */
@@ -234,11 +311,11 @@ export const clientScript = `
       font-weight: 600;
     }
 
-    /* Section & Segment Controls */
+    /* Property Groups */
     .prop-section {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 5px;
     }
     .prop-label {
       font-size: 10px;
@@ -268,16 +345,14 @@ export const clientScript = `
       text-align: center;
       transition: all 0.12s;
     }
-    .seg-btn:hover {
-      color: #f1f5f9;
-    }
+    .seg-btn:hover { color: #f1f5f9; }
     .seg-btn.active {
       background: #1e293b;
       color: #38bdf8;
       box-shadow: 0 1px 3px rgba(0,0,0,0.3);
     }
 
-    /* Color Swatches Grid */
+    /* Swatches */
     .swatches {
       display: flex;
       align-items: center;
@@ -300,21 +375,7 @@ export const clientScript = `
       border: 2px solid #38bdf8;
       box-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
     }
-    .color-picker-btn {
-      background: none;
-      border: 1px dashed #334155;
-      border-radius: 50%;
-      width: 22px;
-      height: 22px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 11px;
-      color: #94a3b8;
-    }
 
-    /* Text & Input Field */
     .clean-input {
       background: #0f172a;
       border: 1px solid #1e293b;
@@ -326,36 +387,77 @@ export const clientScript = `
       width: 100%;
       transition: border-color 0.15s;
     }
-    .clean-input:focus {
-      border-color: #38bdf8;
+    .clean-input:focus { border-color: #38bdf8; }
+
+    /* Diff Review Drawer */
+    .diff-container {
+      background: #090d16;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      padding: 8px;
+      font-family: monospace;
+      font-size: 11px;
+      display: none;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+    .diff-del {
+      color: #f87171;
+      background: rgba(239, 68, 68, 0.1);
+      padding: 2px 4px;
+      border-radius: 3px;
+      word-break: break-all;
+    }
+    .diff-add {
+      color: #4ade80;
+      background: rgba(34, 197, 94, 0.1);
+      padding: 2px 4px;
+      border-radius: 3px;
+      word-break: break-all;
     }
 
-    /* Primary Sync Button */
+    /* Actions */
+    .sync-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      margin-top: 4px;
+    }
     .sync-btn {
+      flex: 1;
       background: #0284c7;
       color: #ffffff;
       border: none;
       border-radius: 8px;
-      padding: 10px;
+      padding: 9px;
       font-size: 12px;
       font-weight: 700;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
+      gap: 6px;
       transition: all 0.15s;
-      margin-top: 4px;
       box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);
     }
-    .sync-btn:hover {
-      background: #0369a1;
-      transform: translateY(-1px);
+    .sync-btn:hover { background: #0369a1; }
+    .sync-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .discard-btn {
+      background: #1e293b;
+      color: #94a3b8;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 9px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.12s;
     }
-    .sync-btn:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-      transform: none;
+    .discard-btn:hover {
+      background: #334155;
+      color: #f1f5f9;
     }
     .sync-status {
       font-size: 11px;
@@ -398,13 +500,20 @@ export const clientScript = `
   panel.className = 'studio-panel';
   panel.innerHTML = \`
     <div class="studio-header">
-      <div>
+      <div class="studio-header-left">
         <div class="studio-tag-badge">
           <span id="flimsy-elem-tag">&lt;button&gt;</span>
         </div>
-        <div class="studio-loc-badge" id="flimsy-elem-loc">src/Hero.tsx:16</div>
+        <div class="studio-loc-row">
+          <span class="studio-loc-badge" id="flimsy-elem-loc">src/Hero.tsx:16</span>
+          <span class="instance-badge" id="flimsy-instance-badge"></span>
+        </div>
       </div>
-      <button class="close-btn" title="Close (Esc)">&times;</button>
+      <div class="header-actions">
+        <button class="icon-btn" id="flimsy-undo-btn" title="Undo (Ctrl+Z)" disabled>↶</button>
+        <button class="icon-btn" id="flimsy-redo-btn" title="Redo (Ctrl+Y)" disabled>↷</button>
+        <button class="icon-btn" id="flimsy-close-btn" title="Close (Esc)">&times;</button>
+      </div>
     </div>
 
     <div class="prop-section">
@@ -413,11 +522,11 @@ export const clientScript = `
 
     <!-- Text Edit -->
     <div class="prop-section" id="flimsy-text-group">
-      <div class="prop-label">Content (Double-click element to edit)</div>
+      <div class="prop-label">Text Content (Double-click to edit)</div>
       <input type="text" id="flimsy-text-input" class="clean-input" placeholder="Text content...">
     </div>
 
-    <!-- Typography: Size & Weight -->
+    <!-- Typography -->
     <div class="prop-section">
       <div class="prop-label">Typography</div>
       <div class="segmented" id="seg-font-size">
@@ -434,16 +543,11 @@ export const clientScript = `
         <button class="seg-btn" data-class="font-semibold">Semi</button>
         <button class="seg-btn" data-class="font-bold">Bold</button>
       </div>
-      <div class="segmented" id="seg-text-align" style="margin-top:4px;">
-        <button class="seg-btn" data-class="text-left">Left</button>
-        <button class="seg-btn" data-class="text-center">Center</button>
-        <button class="seg-btn" data-class="text-right">Right</button>
-      </div>
     </div>
 
     <!-- Spacing & Radius -->
     <div class="prop-section">
-      <div class="prop-label">Padding & Margin</div>
+      <div class="prop-label">Padding & Radius</div>
       <div class="segmented" id="seg-padding">
         <button class="seg-btn" data-class="p-0">p-0</button>
         <button class="seg-btn" data-class="p-2">p-2</button>
@@ -492,19 +596,67 @@ export const clientScript = `
       <input type="text" id="flimsy-classes-raw" class="clean-input" placeholder="Tailwind classes...">
     </div>
 
-    <button id="flimsy-sync-btn" class="sync-btn">Sync to Code</button>
+    <!-- Diff Preview Drawer -->
+    <div id="flimsy-diff-box" class="diff-container"></div>
+
+    <div class="sync-row">
+      <button id="flimsy-sync-btn" class="sync-btn">Sync to Code</button>
+      <button id="flimsy-discard-btn" class="discard-btn" title="Discard pending changes">Reset</button>
+    </div>
     <div id="flimsy-sync-status" class="sync-status"></div>
   \`;
   shadow.appendChild(panel);
 
   const elemTagDisplay = panel.querySelector('#flimsy-elem-tag');
   const elemLocDisplay = panel.querySelector('#flimsy-elem-loc');
+  const instanceBadge = panel.querySelector('#flimsy-instance-badge');
+  const undoBtn = panel.querySelector('#flimsy-undo-btn');
+  const redoBtn = panel.querySelector('#flimsy-redo-btn');
   const trailContainer = panel.querySelector('#flimsy-trail');
   const textInput = panel.querySelector('#flimsy-text-input');
   const classesRawInput = panel.querySelector('#flimsy-classes-raw');
+  const diffBox = panel.querySelector('#flimsy-diff-box');
   const syncBtn = panel.querySelector('#flimsy-sync-btn');
+  const discardBtn = panel.querySelector('#flimsy-discard-btn');
   const syncStatus = panel.querySelector('#flimsy-sync-status');
-  const closeBtn = panel.querySelector('.close-btn');
+  const closeBtn = panel.querySelector('#flimsy-close-btn');
+
+  function updateUndoRedoUI() {
+    undoBtn.disabled = historyIdx <= 0;
+    redoBtn.disabled = historyIdx >= history.length - 1;
+  }
+
+  function renderDiff() {
+    let hasDiff = false;
+    diffBox.innerHTML = '';
+
+    if (pendingClasses !== originalClasses) {
+      hasDiff = true;
+      const delLine = document.createElement('div');
+      delLine.className = 'diff-del';
+      delLine.textContent = '- class: ' + (originalClasses || '(none)');
+      const addLine = document.createElement('div');
+      addLine.className = 'diff-add';
+      addLine.textContent = '+ class: ' + pendingClasses;
+      diffBox.appendChild(delLine);
+      diffBox.appendChild(addLine);
+    }
+
+    if (pendingText !== null && pendingText !== originalText) {
+      hasDiff = true;
+      const delText = document.createElement('div');
+      delText.className = 'diff-del';
+      delText.textContent = '- text: "' + originalText + '"';
+      const addText = document.createElement('div');
+      addText.className = 'diff-add';
+      addText.textContent = '+ text: "' + pendingText + '"';
+      diffBox.appendChild(delText);
+      diffBox.appendChild(addText);
+    }
+
+    diffBox.style.display = hasDiff ? 'flex' : 'none';
+    syncBtn.textContent = hasDiff ? 'Sync to Code' : 'No Changes';
+  }
 
   // Client-side Tailwind category disambiguation for instant optimistic preview
   function applyOptimisticClass(newClass) {
@@ -535,8 +687,8 @@ export const clientScript = `
       if (category === 'font-weight' && b.startsWith('font-')) return false;
       if (category === 'border-radius' && b.startsWith('rounded')) return false;
       if (category === 'box-shadow' && b.startsWith('shadow')) return false;
-      if (category === 'padding' && b.startsWith('p-')) return false;
-      if (category === 'margin' && b.startsWith('m-')) return false;
+      if (category === 'padding' && (b.startsWith('p-') || /^p[xytrbl]-/.test(b))) return false;
+      if (category === 'margin' && (b.startsWith('m-') || /^m[xytrbl]-/.test(b))) return false;
       if (category === 'bg-color' && b.startsWith('bg-')) return false;
       if (category === 'flex-dir' && /^flex-(row|col)$/.test(b)) return false;
       if (category === 'justify' && b.startsWith('justify-')) return false;
@@ -550,9 +702,9 @@ export const clientScript = `
     classesRawInput.value = updated;
     updateActiveSegmentedUI(updated);
     updateHighlightBox(selectedTarget, true);
+    pushHistory(pendingClasses, pendingText);
   }
 
-  // Update active segmented buttons based on classes
   function updateActiveSegmentedUI(classesStr) {
     const tokens = (classesStr || '').split(/\\s+/);
     panel.querySelectorAll('.seg-btn').forEach((btn) => {
@@ -561,7 +713,6 @@ export const clientScript = `
     });
   }
 
-  // Toggle Inspect Mode
   function toggleInspect(force) {
     isInspectActive = typeof force === 'boolean' ? force : !isInspectActive;
     dockBtn.classList.toggle('active', isInspectActive);
@@ -578,8 +729,10 @@ export const clientScript = `
   }
 
   dockBtn.addEventListener('click', () => toggleInspect());
+  undoBtn.addEventListener('click', () => undo());
+  redoBtn.addEventListener('click', () => redo());
 
-  // Global Keys (Alt+X and Esc)
+  // Global Keys (Alt+X, Esc, Ctrl+Z, Ctrl+Y)
   window.addEventListener('keydown', (e) => {
     if (e.altKey && (e.key === 'x' || e.key === 'X' || e.code === 'KeyX')) {
       e.preventDefault();
@@ -592,6 +745,16 @@ export const clientScript = `
         panel.style.display = 'none';
       } else if (isInspectActive) {
         toggleInspect(false);
+      }
+    } else if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+      if (isInspectActive && selectedTarget) {
+        e.preventDefault();
+        undo();
+      }
+    } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && (e.key === 'z' || e.key === 'Z')))) {
+      if (isInspectActive && selectedTarget) {
+        e.preventDefault();
+        redo();
       }
     }
   });
@@ -655,6 +818,16 @@ export const clientScript = `
     });
   }
 
+  async function checkFileMtime(file) {
+    try {
+      const res = await fetch('/__flimsy/api/inspect?file=' + encodeURIComponent(file));
+      const data = await res.json();
+      if (data.success) {
+        fileMtime = data.mtime;
+      }
+    } catch {}
+  }
+
   function selectElement(target) {
     if (selectedTarget && selectedTarget !== target) {
       selectedTarget.contentEditable = 'false';
@@ -666,6 +839,11 @@ export const clientScript = `
     pendingText = null;
     pendingClasses = originalClasses;
 
+    // Reset history stack for newly selected element
+    history = [{ classes: originalClasses, text: originalText }];
+    historyIdx = 0;
+    updateUndoRedoUI();
+
     updateHighlightBox(target, true);
 
     const file = target.getAttribute('data-flimsy-file') || '';
@@ -675,13 +853,24 @@ export const clientScript = `
     elemTagDisplay.textContent = '<' + name + '>';
     elemLocDisplay.textContent = file + ':' + line;
 
+    // Check multiple instances on page
+    const matchingElements = document.querySelectorAll('[data-flimsy-file="' + file + '"]');
+    if (matchingElements.length > 1) {
+      instanceBadge.textContent = '⚠️ ' + matchingElements.length + ' instances on page';
+      instanceBadge.style.display = 'inline-block';
+    } else {
+      instanceBadge.style.display = 'none';
+    }
+
+    checkFileMtime(file);
+
     textInput.value = originalText;
     classesRawInput.value = originalClasses;
     updateActiveSegmentedUI(originalClasses);
     buildTrail(target);
+    renderDiff();
 
     syncStatus.style.display = 'none';
-    syncBtn.textContent = 'Sync to Code';
     syncBtn.disabled = false;
     panel.style.display = 'flex';
   }
@@ -728,7 +917,6 @@ export const clientScript = `
       e.stopPropagation();
       selectElement(target);
 
-      // Turn on direct in-situ editing on the web page element
       target.contentEditable = 'true';
       target.focus();
 
@@ -737,6 +925,7 @@ export const clientScript = `
         const newText = target.innerText.trim();
         pendingText = newText;
         textInput.value = newText;
+        pushHistory(pendingClasses, pendingText);
         target.removeEventListener('blur', onBlur);
       };
       target.addEventListener('blur', onBlur);
@@ -765,9 +954,9 @@ export const clientScript = `
   textInput.addEventListener('input', () => {
     if (!selectedTarget) return;
     pendingText = textInput.value;
-    // Optimistic DOM text update
     selectedTarget.innerText = textInput.value;
     updateHighlightBox(selectedTarget, true);
+    pushHistory(pendingClasses, pendingText);
   });
 
   // Raw classes input sync
@@ -777,6 +966,7 @@ export const clientScript = `
     selectedTarget.className = pendingClasses;
     updateActiveSegmentedUI(pendingClasses);
     updateHighlightBox(selectedTarget, true);
+    pushHistory(pendingClasses, pendingText);
   });
 
   // Segmented control click handlers
@@ -797,7 +987,28 @@ export const clientScript = `
     });
   });
 
-  // Unified Sync Action
+  // Discard / Reset Button
+  discardBtn.addEventListener('click', () => {
+    if (!selectedTarget) return;
+    pendingClasses = originalClasses;
+    pendingText = originalText;
+    selectedTarget.className = originalClasses;
+    selectedTarget.innerText = originalText;
+    classesRawInput.value = originalClasses;
+    textInput.value = originalText;
+    updateActiveSegmentedUI(originalClasses);
+    updateHighlightBox(selectedTarget, true);
+    history = [{ classes: originalClasses, text: originalText }];
+    historyIdx = 0;
+    updateUndoRedoUI();
+    renderDiff();
+    syncStatus.style.display = 'block';
+    syncStatus.style.color = '#94a3b8';
+    syncStatus.textContent = 'Changes reset.';
+    setTimeout(() => { syncStatus.style.display = 'none'; }, 1200);
+  });
+
+  // Unified Sync Action with Safety Checks
   syncBtn.addEventListener('click', async () => {
     if (!selectedTarget) return;
 
@@ -821,14 +1032,20 @@ export const clientScript = `
     }
 
     syncBtn.disabled = true;
-    syncBtn.textContent = 'Syncing to code...';
+    syncBtn.textContent = 'Syncing...';
     syncStatus.style.display = 'none';
 
     try {
       const res = await fetch('/__flimsy/api/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file, line, col, actions }),
+        body: JSON.stringify({
+          file,
+          line,
+          col,
+          actions,
+          expectedMtime: fileMtime || undefined,
+        }),
       });
       const data = await res.json();
       if (data.success) {
@@ -838,10 +1055,32 @@ export const clientScript = `
         syncBtn.textContent = '✓ Synced';
         originalClasses = pendingClasses;
         originalText = pendingText !== null ? pendingText : originalText;
+        fileMtime = data.mtime || fileMtime;
+        history = [{ classes: originalClasses, text: originalText }];
+        historyIdx = 0;
+        updateUndoRedoUI();
+        renderDiff();
         setTimeout(() => {
-          syncBtn.textContent = 'Sync to Code';
+          syncBtn.textContent = 'No Changes';
           syncBtn.disabled = false;
         }, 1500);
+      } else if (data.conflict) {
+        syncStatus.style.display = 'block';
+        syncStatus.style.color = '#fbbf24';
+        syncStatus.textContent = '⚠️ ' + data.error;
+        syncBtn.textContent = 'Force Overwrite';
+        syncBtn.disabled = false;
+        // Clicking again will force overwrite
+        const onForce = async () => {
+          syncBtn.removeEventListener('click', onForce);
+          await fetch('/__flimsy/api/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ file, line, col, actions, force: true }),
+          });
+          syncBtn.textContent = '✓ Overwritten';
+        };
+        syncBtn.addEventListener('click', onForce, { once: true });
       } else {
         syncStatus.style.display = 'block';
         syncStatus.style.color = '#f87171';

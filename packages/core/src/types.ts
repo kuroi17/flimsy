@@ -16,6 +16,8 @@ export interface UpdateSourceOptions {
   column: number;
   action?: UpdateAction;
   actions?: UpdateAction[];
+  expectedMtime?: number;
+  force?: boolean;
   rootDir?: string;
 }
 
@@ -24,7 +26,23 @@ export interface UpdateResult {
   filePath: string;
   oldCode?: string;
   newCode?: string;
+  mtime?: number;
+  conflict?: boolean;
   error?: string;
+}
+
+export interface DiffPreview {
+  filePath: string;
+  line: number;
+  originalClasses?: string;
+  newClasses?: string;
+  originalText?: string;
+  newText?: string;
+  changes: Array<{
+    type: 'class' | 'text';
+    oldValue: string;
+    newValue: string;
+  }>;
 }
 
 export interface InjectOptions {

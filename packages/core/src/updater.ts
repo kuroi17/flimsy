@@ -17,7 +17,18 @@ export async function updateSourceFile(
     : path.resolve(root, options.filePath);
 
   let oldCode: string;
+  let stats: any;
   try {
+    stats = await fs.stat(resolvedPath);
+    if (options.expectedMtime && !options.force && stats.mtimeMs > options.expectedMtime + 50) {
+      return {
+        success: false,
+        filePath: resolvedPath,
+        conflict: true,
+        mtime: stats.mtimeMs,
+        error: `File was modified externally on disk since last inspected. Please review changes before overwriting.`,
+      };
+    }
     oldCode = await fs.readFile(resolvedPath, 'utf-8');
   } catch (err: any) {
     return {
@@ -142,11 +153,55 @@ export async function updateSourceFile(
     };
   }
 
+  let newMtime = Date.now();
+  try {
+    const newStats = await fs.stat(resolvedPath);
+    newMtime = newStats.mtimeMs;
+  } catch {}
+
   return {
     success: true,
     filePath: resolvedPath,
     oldCode,
     newCode,
+    mtime: newMtime,
+  };
+}
+
+/**
+ * Generates human-readable diff items between original and pending values
+ */
+export function generateDiffPreview(
+  filePath: string,
+  line: number,
+  originalClasses: string,
+  newClasses: string,
+  originalText: string,
+  newText: string | null
+) {
+  const changes = [];
+  if (originalClasses !== newClasses) {
+    changes.push({
+      type: 'class' as const,
+      oldValue: originalClasses,
+      newValue: newClasses,
+    });
+  }
+  if (newText !== null && originalText !== newText) {
+    changes.push({
+      type: 'text' as const,
+      oldValue: originalText,
+      newValue: newText,
+    });
+  }
+  return {
+    filePath,
+    line,
+    originalClasses,
+    newClasses,
+    originalText,
+    newText: newText || originalText,
+    changes,
   };
 }
 

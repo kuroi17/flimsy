@@ -1,4 +1,6 @@
 import type { Plugin } from 'vite';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { injectSourceLocations, updateSourceFile } from '@flimsy/core';
 import { clientScript } from './client-script.js';
 
@@ -36,12 +38,31 @@ export function flimsy(options: FlimsyOptions = {}): Plugin {
       if (options.enabled === false) return;
 
       // Middleware: Serve client script & handle update API
-      server.middlewares.use((req, res, next) => {
+      server.middlewares.use(async (req, res, next) => {
         if (req.url === '/@flimsy/client.js') {
           res.setHeader('Content-Type', 'application/javascript');
           res.setHeader('Cache-Control', 'no-cache');
           res.end(clientScript);
           return;
+        }
+
+        if (req.url?.startsWith('/__flimsy/api/inspect')) {
+          const url = new URL(req.url, 'http://localhost');
+          const file = url.searchParams.get('file');
+          if (file) {
+            try {
+              const fullPath = path.resolve(root, file);
+              const stats = await fs.stat(fullPath);
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: true, mtime: stats.mtimeMs }));
+              return;
+            } catch (e: any) {
+              res.statusCode = 404;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, error: e.message }));
+              return;
+            }
+          }
         }
 
         if (req.url === '/__flimsy/api/update' && req.method === 'POST') {
@@ -58,6 +79,8 @@ export function flimsy(options: FlimsyOptions = {}): Plugin {
                 column: Number(data.col || 0),
                 action: data.action,
                 actions: data.actions,
+                expectedMtime: data.expectedMtime,
+                force: Boolean(data.force),
                 rootDir: root,
               });
 

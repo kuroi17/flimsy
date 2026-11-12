@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { injectSourceLocations, updateSourceFile, reconcileClasses } from '../src/index.js';
+import { injectSourceLocations, updateSourceFile, reconcileClasses, generateDiffPreview } from '../src/index.js';
 
 describe('@flimsy/core: injectSourceLocations', () => {
   it('injects data-flimsy-* attributes into JSX elements', () => {
@@ -238,6 +238,68 @@ export function Button({ isPrimary }: { isPrimary: boolean }) {
     const updatedContent = await fs.readFile(sampleFilePath, 'utf-8');
     expect(updatedContent).toContain('Hello again, ');
     expect(updatedContent).toContain('{name}');
+  });
+
+  it('detects external file modifications and warns of conflict', async () => {
+    const sampleFilePath = path.join(tempDir, 'ExternalEdit.tsx');
+    const initialContent = `export function Box() { return <div>Original</div>; }`;
+    await fs.writeFile(sampleFilePath, initialContent, 'utf-8');
+
+    // Simulate an older expectedMtime from before external modification
+    const pastMtime = Date.now() - 5000;
+
+    const conflictRes = await updateSourceFile({
+      filePath: sampleFilePath,
+      line: 1,
+      column: 32,
+      expectedMtime: pastMtime,
+      action: { type: 'update-text', text: 'Overwritten' },
+    });
+
+    expect(conflictRes.success).toBe(false);
+    expect(conflictRes.conflict).toBe(true);
+    expect(conflictRes.error).toContain('modified externally');
+
+    // Verify original content was untouched
+    const diskContent = await fs.readFile(sampleFilePath, 'utf-8');
+    expect(diskContent).toBe(initialContent);
+
+    // Verify force: true allows explicit overwrite
+    const forceRes = await updateSourceFile({
+      filePath: sampleFilePath,
+      line: 1,
+      column: 32,
+      expectedMtime: pastMtime,
+      force: true,
+      action: { type: 'update-text', text: 'Forced Update' },
+    });
+    expect(forceRes.success).toBe(true);
+    const forcedContent = await fs.readFile(sampleFilePath, 'utf-8');
+    expect(forcedContent).toContain('Forced Update');
+  });
+
+  it('generates accurate diff preview objects', () => {
+    const diff = generateDiffPreview(
+      'src/Button.tsx',
+      12,
+      'p-2 bg-blue-500',
+      'p-6 bg-emerald-500 rounded-lg',
+      'Old Text',
+      'New Text'
+    );
+
+    expect(diff.filePath).toBe('src/Button.tsx');
+    expect(diff.changes.length).toBe(2);
+    expect(diff.changes[0]).toEqual({
+      type: 'class',
+      oldValue: 'p-2 bg-blue-500',
+      newValue: 'p-6 bg-emerald-500 rounded-lg',
+    });
+    expect(diff.changes[1]).toEqual({
+      type: 'text',
+      oldValue: 'Old Text',
+      newValue: 'New Text',
+    });
   });
 });
 

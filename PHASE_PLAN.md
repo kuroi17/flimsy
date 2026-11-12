@@ -113,19 +113,21 @@
 
 ---
 
-## Phase 4: Change Management, Diff Review & Safety (Week 8)
+## Phase 4: Change Management, Diff Review & Safety (Week 8) [COMPLETED]
 **Goal:** Give developers full visibility and trust over the changes applied to their code.
 
-- [ ] **Pending Changes & Diff Preview Drawer**
-  - Bottom/side drawer listing all queued edits.
-  - Side-by-side git-style code diff preview before hitting "Apply".
-- [ ] **Undo / Redo Buffer**
-  - Standard `Ctrl+Z` / `Ctrl+Y` support during the visual editing session.
-- [ ] **Multiple Instance Warning**
-  - If an edited element belongs to a shared component used in multiple places, warn the user:
-    *"Editing `Card.tsx` will affect 4 instances on this page."*
-- [ ] **External File Modification Detection**
-  - Detect if file was changed in VS Code while editing in Flimsy to prevent overwriting newer changes.
+- [x] **Pending Changes & Diff Preview Drawer**
+  - Integrated, expandable diff block inside the Studio Panel showing real-time added/deleted Tailwind classes and text changes.
+  - Dedicated "Reset" action to discard pending changes with one click.
+- [x] **Undo / Redo Buffer**
+  - Full session history stack supporting `Ctrl+Z` / `Cmd+Z` (Undo) and `Ctrl+Y` / `Cmd+Shift+Z` (Redo).
+  - Minimalist `↶` and `↷` toolbar buttons with dynamic active/disabled states.
+- [x] **Multiple Instance Warning**
+  - Automatically scans the live DOM for shared component usages (`document.querySelectorAll('[data-flimsy-file="..."]')`).
+  - Alerts developer with a subtle amber badge when modifying a component rendered in multiple places (e.g. `⚠️ 2 instances on page`).
+- [x] **External File Modification Detection**
+  - Records file `mtime` upon selection and inspects disk state prior to writing.
+  - Warns developer if the file was modified in VS Code or externally while Flimsy was open, providing "Force Overwrite" safety gates.
 
 ---
 
