@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { flimsy } from 'flimsy/vite';
+import { flimsy } from 'flimsy-dev/vite';
 
 export default defineConfig({
   plugins: [

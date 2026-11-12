@@ -4,7 +4,7 @@
 > *Direct UI changes synced directly to your codebase.*
 
 [![CI](https://github.com/kuroi17/flimsy/actions/workflows/ci.yml/badge.svg)](https://github.com/kuroi17/flimsy)
-[![npm version](https://img.shields.io/npm/v/flimsy.svg)](https://www.npmjs.com/package/flimsy)
+[![npm version](https://img.shields.io/npm/v/flimsy-dev.svg)](https://www.npmjs.com/package/flimsy-dev)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Zero Telemetry](https://img.shields.io/badge/telemetry-none-brightgreen.svg)](#privacy--local-first-guarantee)
 
@@ -31,7 +31,7 @@ Current developer workflows often require taking screenshots, writing verbose pr
 Run Flimsy in your existing React + Vite project with zero installation:
 
 ```bash
-npx flimsy dev
+npx flimsy-dev dev
 ```
 
 ### Option 2: Standalone Vite Plugin
@@ -39,9 +39,9 @@ npx flimsy dev
 Install Flimsy as a development dependency:
 
 ```bash
-pnpm add -D flimsy
+pnpm add -D flimsy-dev
 # or
-npm install -D flimsy
+npm install -D flimsy-dev
 ```
 
 Add to your `vite.config.ts`:
@@ -49,7 +49,7 @@ Add to your `vite.config.ts`:
 ```ts
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { flimsy } from 'flimsy/vite';
+import { flimsy } from 'flimsy-dev/vite';
 
 export default defineConfig({
   plugins: [
@@ -89,9 +89,9 @@ pnpm dev
 
 ## 📦 Packages in Monorepo
 
-* **[`flimsy`](packages/cli)**: Main CLI runner and package exports (`npx flimsy dev`).
-* **[`@flimsy/vite`](packages/vite-plugin)**: Vite development server plugin, overlay injector, and dev update API.
-* **[`@flimsy/core`](packages/core)**: AST location injector (`magic-string`), deterministic file reconciler (`recast`), and conflict solver.
+* **[`flimsy-dev`](packages/cli)**: Main CLI runner and package exports (`npx flimsy-dev dev`).
+* **[`flimsy-vite`](packages/vite-plugin)**: Vite development server plugin, overlay injector, and dev update API.
+* **[`flimsy-core`](packages/core)**: AST location injector (`magic-string`), deterministic file reconciler (`recast`), and conflict solver.
 
 ---
 

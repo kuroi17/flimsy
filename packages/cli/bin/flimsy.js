@@ -34,7 +34,7 @@ if (values.version) {
 if (values.help) {
   console.log(`
 Usage:
-  npx flimsy [command] [options]
+  npx flimsy-dev [command] [options]
 
 Commands:
   dev               Launch development server with Flimsy visual editor (default)

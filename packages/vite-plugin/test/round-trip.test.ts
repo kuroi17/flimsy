@@ -152,4 +152,25 @@ describe('Vite Plugin Round-trip Integration', () => {
     expect(data.suggestion.suggestedClasses).toContain('backdrop-blur-md');
     expect(data.copyPrompt).toContain('Add glassmorphism style');
   });
+
+  it('guards against duplicate flimsy() plugin registrations', async () => {
+    const dupServer = await createServer({
+      root: playgroundRoot,
+      server: { port: 5198, host: '127.0.0.1' },
+      plugins: [flimsy(), flimsy()],
+    });
+    await dupServer.listen();
+    try {
+      const res = await fetch('http://127.0.0.1:5198/');
+      const html = await res.text();
+      const matches = html.match(/\/@flimsy\/client\.js/g) || [];
+      expect(matches.length).toBe(1);
+    } finally {
+      dupServer.httpServer?.closeAllConnections?.();
+      await Promise.race([
+        dupServer.close(),
+        new Promise((resolve) => setTimeout(resolve, 500)),
+      ]);
+    }
+  });
 });

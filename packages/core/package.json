@@ -1,5 +1,5 @@
 {
-  "name": "@flimsy/core",
+  "name": "flimsy-core",
   "version": "0.1.0",
   "type": "module",
   "description": "Core AST parser, JSX location coordinate injector, and file reconciler for Flimsy",

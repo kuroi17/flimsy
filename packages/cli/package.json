@@ -1,5 +1,5 @@
 {
-  "name": "flimsy",
+  "name": "flimsy-dev",
   "version": "0.1.0",
   "type": "module",
   "description": "Direct visual-to-code synchronization tool for modern web development",
@@ -12,9 +12,12 @@
   "keywords": ["vite", "visual-editor", "tailwind", "react", "dx", "ast", "figma"],
   "files": [
     "bin",
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "bin": {
+    "flimsy-dev": "./bin/flimsy.js",
     "flimsy": "./bin/flimsy.js"
   },
   "main": "./dist/index.js",
@@ -34,8 +37,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@flimsy/core": "workspace:*",
-    "@flimsy/vite": "workspace:*"
+    "flimsy-core": "workspace:*",
+    "flimsy-vite": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.13.4",

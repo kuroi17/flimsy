@@ -36,7 +36,7 @@ importers:
       autoprefixer:
         specifier: ^10.4.20
         version: 10.6.2(postcss@8.5.32)
-      flimsy:
+      flimsy-dev:
         specifier: workspace:*
         version: link:../../packages/cli
       postcss:
@@ -54,10 +54,10 @@ importers:
 
   packages/cli:
     dependencies:
-      '@flimsy/core':
+      flimsy-core:
         specifier: workspace:*
         version: link:../core
-      '@flimsy/vite':
+      flimsy-vite:
         specifier: workspace:*
         version: link:../vite-plugin
     devDependencies:
@@ -104,7 +104,7 @@ importers:
 
   packages/vite-plugin:
     dependencies:
-      '@flimsy/core':
+      flimsy-core:
         specifier: workspace:*
         version: link:../core
     devDependencies:

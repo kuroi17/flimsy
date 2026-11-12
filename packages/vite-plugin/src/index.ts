@@ -1,7 +1,7 @@
 import type { Plugin } from 'vite';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { injectSourceLocations, updateSourceFile } from '@flimsy/core';
+import { injectSourceLocations, updateSourceFile } from 'flimsy-core';
 import { clientScript } from './client-script.js';
 
 export interface FlimsyOptions {
@@ -13,18 +13,24 @@ export interface FlimsyOptions {
 
 export function flimsy(options: FlimsyOptions = {}): Plugin {
   let root = process.cwd();
+  let isDuplicate = false;
 
-  return {
+  const plugin: Plugin = {
     name: 'vite-plugin-flimsy',
     apply: 'serve', // Only active during local development
     enforce: 'pre',
 
     configResolved(config) {
       root = config.root;
+      const firstIdx = config.plugins.findIndex((p) => p && p.name === 'vite-plugin-flimsy');
+      const selfIdx = config.plugins.indexOf(plugin);
+      if (firstIdx !== -1 && selfIdx !== -1 && selfIdx !== firstIdx) {
+        isDuplicate = true;
+      }
     },
 
     transform(code, id) {
-      if (options.enabled === false) return null;
+      if (options.enabled === false || isDuplicate) return null;
 
       const cleanId = id.split('?')[0];
       if (!/\.[jt]sx$/.test(cleanId) || cleanId.includes('node_modules')) {
@@ -35,7 +41,7 @@ export function flimsy(options: FlimsyOptions = {}): Plugin {
     },
 
     configureServer(server) {
-      if (options.enabled === false) return;
+      if (options.enabled === false || isDuplicate) return;
 
       // Middleware: Serve client script & handle update API
       server.middlewares.use(async (req, res, next) => {
@@ -73,7 +79,7 @@ export function flimsy(options: FlimsyOptions = {}): Plugin {
           req.on('end', async () => {
             try {
               const data = JSON.parse(body);
-              const { extractAIElementContext, resolveDesignHeuristic } = await import('@flimsy/core');
+              const { extractAIElementContext, resolveDesignHeuristic } = await import('flimsy-core');
               const context = await extractAIElementContext({
                 filePath: data.file,
                 line: Number(data.line),
@@ -137,7 +143,7 @@ export function flimsy(options: FlimsyOptions = {}): Plugin {
     },
 
     transformIndexHtml(html) {
-      if (options.enabled === false) return html;
+      if (options.enabled === false || isDuplicate) return html;
       return [
         {
           tag: 'script',
@@ -150,6 +156,8 @@ export function flimsy(options: FlimsyOptions = {}): Plugin {
       ];
     },
   };
+
+  return plugin;
 }
 
 export default flimsy;
