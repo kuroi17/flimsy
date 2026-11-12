@@ -58,6 +58,8 @@ describe('Vite Plugin Round-trip Integration', () => {
     expect(script).toContain('flimsy-diff-box');
     expect(script).toContain('flimsy-instance-badge');
     expect(script).toContain('flimsy-discard-btn');
+    expect(script).toContain('flimsy-ai-toggle');
+    expect(script).toContain('flimsy-ai-copy');
     expect(script).toContain('contentEditable');
   });
 
@@ -121,5 +123,33 @@ describe('Vite Plugin Round-trip Integration', () => {
     expect(updatedDiskContent).toContain('Live Studio Verified');
     expect(updatedDiskContent).toContain('bg-emerald-500');
     expect(updatedDiskContent).toContain('rounded-xl');
+  });
+
+  it('provides AI context packaging and offline heuristics at /__flimsy/api/ai', async () => {
+    const resModule = await fetch(`${serverUrl}/src/components/Hero.tsx`);
+    const code = await resModule.text();
+
+    const lineMatch = code.match(/"button",\s*\{[^}]*"data-flimsy-file":\s*"src\/components\/Hero\.tsx",\s*"data-flimsy-line":\s*"(\d+)",\s*"data-flimsy-col":\s*"(\d+)"/);
+    expect(lineMatch).not.toBeNull();
+    const line = parseInt(lineMatch![1], 10);
+    const col = parseInt(lineMatch![2], 10);
+
+    const aiRes = await fetch(`${serverUrl}/__flimsy/api/ai`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        file: 'src/components/Hero.tsx',
+        line,
+        col,
+        prompt: 'Add glassmorphism style',
+      }),
+    });
+
+    expect(aiRes.status).toBe(200);
+    const data = await aiRes.json();
+    expect(data.success).toBe(true);
+    expect(data.context.tagName).toBe('button');
+    expect(data.suggestion.suggestedClasses).toContain('backdrop-blur-md');
+    expect(data.copyPrompt).toContain('Add glassmorphism style');
   });
 });

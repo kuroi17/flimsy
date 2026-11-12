@@ -65,6 +65,43 @@ export function flimsy(options: FlimsyOptions = {}): Plugin {
           }
         }
 
+        if (req.url === '/__flimsy/api/ai' && req.method === 'POST') {
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const data = JSON.parse(body);
+              const { extractAIElementContext, resolveDesignHeuristic } = await import('@flimsy/core');
+              const context = await extractAIElementContext({
+                filePath: data.file,
+                line: Number(data.line),
+                column: Number(data.col || 0),
+                userPrompt: data.prompt,
+                rootDir: root,
+              });
+
+              const suggestion = resolveDesignHeuristic(context.currentClasses, data.prompt || '');
+
+              res.setHeader('Content-Type', 'application/json');
+              res.end(
+                JSON.stringify({
+                  success: true,
+                  context,
+                  suggestion,
+                  copyPrompt: context.formattedPrompt,
+                })
+              );
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+          });
+          return;
+        }
+
         if (req.url === '/__flimsy/api/update' && req.method === 'POST') {
           let body = '';
           req.on('data', (chunk) => {

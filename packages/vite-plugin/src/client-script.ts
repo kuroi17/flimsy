@@ -419,6 +419,35 @@ export const clientScript = `
     }
 
     /* Actions */
+    .ai-chip {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      color: #94a3b8;
+      border-radius: 4px;
+      padding: 3px 6px;
+      font-size: 10px;
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+    .ai-chip:hover {
+      background: #1e293b;
+      color: #38bdf8;
+      border-color: #38bdf8;
+    }
+    .action-btn {
+      background: #0284c7;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .action-btn:hover {
+      background: #0369a1;
+    }
     .sync-row {
       display: flex;
       gap: 6px;
@@ -590,6 +619,28 @@ export const clientScript = `
       </div>
     </div>
 
+    <!-- AI Assist (Optional) -->
+    <div class="prop-section">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span class="prop-label">AI Assist (Optional)</span>
+        <button id="flimsy-ai-toggle" style="background:none; border:none; color:#38bdf8; font-size:10px; cursor:pointer; font-weight:600;">✨ Open</button>
+      </div>
+      <div id="flimsy-ai-drawer" style="display:none; flex-direction:column; gap:6px; background:#070a12; border:1px solid #1e293b; padding:8px; border-radius:8px;">
+        <input type="text" id="flimsy-ai-input" class="clean-input" placeholder="e.g. Glassmorphism, Neon glow...">
+        <div style="display:flex; gap:4px; flex-wrap:wrap;">
+          <button class="ai-chip" data-prompt="Glassmorphism card with blur">Glass</button>
+          <button class="ai-chip" data-prompt="Vibrant gradient background">Gradient</button>
+          <button class="ai-chip" data-prompt="Neon glow shadow">Glow</button>
+          <button class="ai-chip" data-prompt="Modern rounded card with shadow">Card</button>
+        </div>
+        <div style="display:flex; gap:6px; margin-top:2px;">
+          <button id="flimsy-ai-generate" class="action-btn" style="flex:1; padding:6px; font-size:11px;">Apply AI Style</button>
+          <button id="flimsy-ai-copy" class="action-btn" style="background:#1e293b; color:#94a3b8; border:1px solid #334155; padding:6px 8px; font-size:11px;" title="Copy prompt for Claude Code or Cursor">📋 Copy</button>
+        </div>
+        <div id="flimsy-ai-feedback" style="font-size:10px; color:#38bdf8; display:none;"></div>
+      </div>
+    </div>
+
     <!-- Raw Classes input -->
     <div class="prop-section">
       <div class="prop-label">Tailwind Classes</div>
@@ -620,6 +671,14 @@ export const clientScript = `
   const discardBtn = panel.querySelector('#flimsy-discard-btn');
   const syncStatus = panel.querySelector('#flimsy-sync-status');
   const closeBtn = panel.querySelector('#flimsy-close-btn');
+
+  const aiToggle = panel.querySelector('#flimsy-ai-toggle');
+  const aiDrawer = panel.querySelector('#flimsy-ai-drawer');
+  const aiInput = panel.querySelector('#flimsy-ai-input');
+  const aiGenerate = panel.querySelector('#flimsy-ai-generate');
+  const aiCopy = panel.querySelector('#flimsy-ai-copy');
+  const aiFeedback = panel.querySelector('#flimsy-ai-feedback');
+  let currentAICopyPrompt = '';
 
   function updateUndoRedoUI() {
     undoBtn.disabled = historyIdx <= 0;
@@ -659,11 +718,12 @@ export const clientScript = `
   }
 
   // Client-side Tailwind category disambiguation for instant optimistic preview
-  function applyOptimisticClass(newClass) {
+  function applyOptimisticClass(newClass, skipHistory = false) {
     if (!selectedTarget) return;
 
     const parts = newClass.split(':');
     const base = parts[parts.length - 1];
+    const variantPrefix = parts.length > 1 ? parts.slice(0, -1).join(':') : '';
 
     let category = '';
     if (/^text-(xs|sm|base|lg|[0-9]?xl)$/.test(base)) category = 'font-size';
@@ -680,7 +740,10 @@ export const clientScript = `
 
     const currentTokens = (selectedTarget.className || '').split(/\\s+/).filter(Boolean);
     const filtered = currentTokens.filter((token) => {
-      const b = token.split(':').pop();
+      const tParts = token.split(':');
+      const tPrefix = tParts.length > 1 ? tParts.slice(0, -1).join(':') : '';
+      if (tPrefix !== variantPrefix) return true;
+      const b = tParts[tParts.length - 1];
       if (category === 'font-size' && /^text-(xs|sm|base|lg|[0-9]?xl)$/.test(b)) return false;
       if (category === 'text-align' && /^text-(left|center|right|justify)$/.test(b)) return false;
       if (category === 'text-color' && b.startsWith('text-') && !/^text-(xs|sm|base|lg|[0-9]?xl|left|center|right)$/.test(b)) return false;
@@ -702,7 +765,7 @@ export const clientScript = `
     classesRawInput.value = updated;
     updateActiveSegmentedUI(updated);
     updateHighlightBox(selectedTarget, true);
-    pushHistory(pendingClasses, pendingText);
+    if (!skipHistory) pushHistory(pendingClasses, pendingText);
   }
 
   function updateActiveSegmentedUI(classesStr) {
@@ -870,6 +933,9 @@ export const clientScript = `
     buildTrail(target);
     renderDiff();
 
+    currentAICopyPrompt = '';
+    if (aiFeedback) aiFeedback.style.display = 'none';
+
     syncStatus.style.display = 'none';
     syncBtn.disabled = false;
     panel.style.display = 'flex';
@@ -985,6 +1051,98 @@ export const clientScript = `
         classesToAdd.split(' ').forEach((c) => applyOptimisticClass(c));
       }
     });
+  });
+
+  // AI Assist Controls (Optional)
+  aiToggle.addEventListener('click', () => {
+    const isHidden = aiDrawer.style.display === 'none' || !aiDrawer.style.display;
+    aiDrawer.style.display = isHidden ? 'flex' : 'none';
+    aiToggle.textContent = isHidden ? '✕ Close' : '✨ Open';
+  });
+
+  panel.querySelectorAll('.ai-chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      aiInput.value = chip.getAttribute('data-prompt') || '';
+    });
+  });
+
+  aiGenerate.addEventListener('click', async () => {
+    if (!selectedTarget) return;
+    const prompt = aiInput.value.trim();
+    if (!prompt) return;
+
+    aiGenerate.disabled = true;
+    aiGenerate.textContent = 'Applying...';
+    aiFeedback.style.display = 'block';
+    aiFeedback.textContent = 'Generating style suggestion...';
+
+    const file = selectedTarget.getAttribute('data-flimsy-file');
+    const line = parseInt(selectedTarget.getAttribute('data-flimsy-line'), 10);
+    const col = parseInt(selectedTarget.getAttribute('data-flimsy-col'), 10);
+
+    try {
+      const res = await fetch('/__flimsy/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file, line, col, prompt }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (data.suggestion && data.suggestion.suggestedClasses) {
+          const newTokens = data.suggestion.suggestedClasses.split(/\\s+/).filter(Boolean);
+          const oldTokens = (data.context?.currentClasses || '').split(/\\s+/).filter(Boolean);
+          const addedTokens = newTokens.filter((t) => !oldTokens.includes(t));
+          if (addedTokens.length > 0) {
+            addedTokens.forEach((cls) => applyOptimisticClass(cls, true));
+            pushHistory(pendingClasses, pendingText);
+          }
+        }
+        currentAICopyPrompt = data.copyPrompt || '';
+        aiFeedback.textContent = '✨ ' + (data.suggestion?.explanation || 'Applied.');
+      } else {
+        aiFeedback.textContent = 'Error: ' + (data.error || 'Failed');
+      }
+    } catch (err) {
+      aiFeedback.textContent = 'Network error contacting AI assist.';
+    } finally {
+      aiGenerate.disabled = false;
+      aiGenerate.textContent = 'Apply AI Style';
+    }
+  });
+
+  aiCopy.addEventListener('click', async () => {
+    if (!selectedTarget) return;
+    const prompt = aiInput.value.trim() || 'Enhance this element design';
+    const file = selectedTarget.getAttribute('data-flimsy-file');
+    const line = parseInt(selectedTarget.getAttribute('data-flimsy-line'), 10);
+    const col = parseInt(selectedTarget.getAttribute('data-flimsy-col'), 10);
+
+    if (!currentAICopyPrompt) {
+      try {
+        const res = await fetch('/__flimsy/api/ai', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ file, line, col, prompt }),
+        });
+        const data = await res.json();
+        if (data.success && data.copyPrompt) {
+          currentAICopyPrompt = data.copyPrompt;
+        }
+      } catch {}
+    }
+
+    const fallbackPrompt = 'Target: ' + file + ':' + line + ':' + col + '\\nClasses: ' + pendingClasses + '\\nGoal: ' + prompt;
+    const textToCopy = currentAICopyPrompt || fallbackPrompt;
+
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      aiFeedback.style.display = 'block';
+      aiFeedback.textContent = '📋 Context & prompt copied to clipboard!';
+      setTimeout(() => { aiFeedback.style.display = 'none'; }, 2000);
+    } catch {
+      aiFeedback.style.display = 'block';
+      aiFeedback.textContent = 'Clipboard permission denied.';
+    }
   });
 
   // Discard / Reset Button

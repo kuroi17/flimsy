@@ -146,15 +146,16 @@
 
 ---
 
-## Phase 6: Optional AI Enhancement Layer (Future / Post-MVP)
+## Phase 6: Optional AI Enhancement Layer (Future / Post-MVP) [COMPLETED]
 **Goal:** Enable contextual AI queries for complex tasks without forcing AI into simple edits.
 
-- [ ] **Context-Aware Prompting**
-  - User selects element $\to$ clicks "Ask AI".
-  - Flimsy packages the exact AST snippet, parent container context, and computed CSS.
-  - Developer inputs prompt: *"Make this card responsive for mobile"* or *"Add a smooth glassmorphism style"*.
-- [ ] **AI Diff Preview & Approval**
-  - Streams AI code modification into the standard Flimsy Diff Preview drawer for user review and 1-click apply.
+- [x] **Context-Aware Prompting & Packaging (`extractAIElementContext`)**
+  - User selects element $\to$ opens optional collapsible **AI Assist** drawer.
+  - Flimsy extracts exact AST target snippet, parent container context, file/line coordinates, and current Tailwind classes.
+  - Provides **1-click Copy Prompt** (`📋 Copy`) formatted cleanly for external AI tools like Claude Code or Cursor.
+- [x] **Offline Design Heuristics & Live Diff Review (`resolveDesignHeuristic`)**
+  - Includes quick prompt chips (*Glass*, *Gradient*, *Glow*, *Card*) and built-in zero-token Tailwind style heuristics (`/__flimsy/api/ai`).
+  - Streams AI style adjustments directly into the live canvas preview and Flimsy Diff Preview drawer for undoable inspection and 1-click `Sync to Code`.
 
 ---
 
@@ -168,4 +169,5 @@
 | **M3 (AST Sync)** | AST engine | Clean Tailwind class updates in `.tsx` files without corrupting code. |
 | **M4 (Safety)** | Diff & Undo | Diff viewer and multi-instance guard. |
 | **M5 (MVP Release)** | NPX CLI | `npx flimsy dev` works out of the box on a fresh React + Tailwind project. |
+| **M6 (AI Layer)** | AI Context & Heuristics | Optional zero-token style heuristics + clipboard prompt export into live diff preview. |
 

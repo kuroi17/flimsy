@@ -2,7 +2,14 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { injectSourceLocations, updateSourceFile, reconcileClasses, generateDiffPreview } from '../src/index.js';
+import {
+  injectSourceLocations,
+  updateSourceFile,
+  reconcileClasses,
+  generateDiffPreview,
+  extractAIElementContext,
+  resolveDesignHeuristic,
+} from '../src/index.js';
 
 describe('@flimsy/core: injectSourceLocations', () => {
   it('injects data-flimsy-* attributes into JSX elements', () => {
@@ -300,6 +307,47 @@ export function Button({ isPrimary }: { isPrimary: boolean }) {
       oldValue: 'Old Text',
       newValue: 'New Text',
     });
+  });
+
+  it('extracts structured AI element context and formats prompt', async () => {
+    const sampleFilePath = path.join(tempDir, 'Card.tsx');
+    const initialContent = `export function Card() {
+  return (
+    <div className="p-4 bg-white">
+      <button className="px-4 py-2 bg-blue-500 text-white">Submit</button>
+    </div>
+  );
+}
+`;
+    await fs.writeFile(sampleFilePath, initialContent, 'utf-8');
+
+    const ctx = await extractAIElementContext({
+      filePath: sampleFilePath,
+      line: 4,
+      column: 6,
+      rootDir: tempDir,
+      userPrompt: 'Make it glassmorphism',
+    });
+
+    expect(ctx.tagName).toBe('button');
+    expect(ctx.componentName).toBe('Card');
+    expect(ctx.currentClasses).toBe('px-4 py-2 bg-blue-500 text-white');
+    expect(ctx.currentText).toBe('Submit');
+    expect(ctx.formattedPrompt).toContain('Make it glassmorphism');
+    expect(ctx.formattedPrompt).toContain('<button');
+    expect(ctx.formattedPrompt).toContain('<Card />');
+  });
+
+  it('resolves offline design heuristics cleanly', () => {
+    const glass = resolveDesignHeuristic('p-4', 'Make it glassmorphism');
+    expect(glass.suggestedClasses).toContain('backdrop-blur-md');
+    expect(glass.explanation).toContain('glassmorphism');
+
+    const glow = resolveDesignHeuristic('bg-slate-900', 'Add neon glow');
+    expect(glow.suggestedClasses).toContain('ring-2');
+
+    const grad = resolveDesignHeuristic('p-2', 'Vibrant gradient background');
+    expect(grad.suggestedClasses).toContain('bg-gradient-to-r');
   });
 });
 
