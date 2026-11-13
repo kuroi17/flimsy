@@ -8,6 +8,16 @@ export type UpdateAction =
       newClasses: string;
       removeClasses?: string[];
       mode?: 'replace' | 'append' | 'reconcile';
+    }
+  | {
+      type: 'delete-element';
+    }
+  | {
+      type: 'duplicate-element';
+    }
+  | {
+      type: 'reorder-child';
+      direction: 'up' | 'down';
     };
 
 export interface UpdateSourceOptions {

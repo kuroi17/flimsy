@@ -1,161 +1,167 @@
 # Phase Plan: Flimsy (Visual-to-Code Synchronization Tool)
 
-**Product Vision:** A Figma-like visual editor directly on localhost that deterministically writes UI edits back into your JSX/Tailwind codebase with zero AI prompt overhead.  
-**Target MVP Stack:** React + Vite + TypeScript + Tailwind CSS  
-**Distribution Model:** NPM Package (`@flimsy/core`, `@flimsy/vite`) & NPX CLI runner (`npx flimsy`)
+**Product Vision:** A Figma-grade visual editor directly on localhost that deterministically writes UI edits back into your JSX/Tailwind codebase with zero AI prompt overhead.  
+**Target Stack:** React + Vite + TypeScript + Tailwind CSS  
+**Distribution Model:** Unified NPM Package (`flimsy-dev`) & NPX CLI runner (`npx flimsy-dev@latest dev`)
 
 ---
 
 ## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      Browser (Localhost)                    │
-│                                                             │
-│  ┌───────────────────────┐       ┌───────────────────────┐  │
-│  │ User Web Application  │       │  Flimsy Visual Client │  │
-│  │ (Rendered React App)  │◄─────►│ (Shadow DOM Overlay)  │  │
-│  └───────────────────────┘       └───────────┬───────────┘  │
-└──────────────────────────────────────────────┼──────────────┘
-                                               │ WebSocket / RPC
-┌──────────────────────────────────────────────┼──────────────┐
-│  Vite Dev Server Plugin / Node CLI Companion │              │
-│                                              ▼              │
-│  ┌─────────────────────────┐   ┌─────────────────────────┐  │
-│  │ Babel/SWC JSX Injector  │   │  AST Sync Engine        │  │
-│  │ (data-source-loc tags)  │   │  (Recast / ts-morph)    │  │
-│  └─────────────────────────┘   └─────────────┬───────────┘  │
-│                                              ▼              │
-│                                ┌─────────────────────────┐  │
-│                                │ Physical Source Files   │  │
-│                                │ (*.tsx, *.jsx)          │  │
-│                                └─────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------+
+|                      Browser (Localhost)                    |
+|                                                             |
+|  +-----------------------+       +-----------------------+  |
+|  | User Web Application  |       |  Flimsy Visual Client |  |
+|  | (Rendered React App)  |<----->| (Shadow DOM Overlay)  |  |
+|  +-----------------------+       +-----------+-----------+  |
++----------------------------------------------|--------------+
+                                               | WebSocket / RPC
++----------------------------------------------|--------------+
+|  Vite Dev Server Plugin / Node CLI Companion |              |
+|                                              v              |
+|  +-------------------------+   +-------------------------+  |
+|  | Babel/SWC JSX Injector  |   |  AST Sync Engine        |  |
+|  | (data-source-loc tags)  |   |  (Recast / ts-morph)    |  |
+|  +-------------------------+   +-------------+-----------+  |
+|                                              v              |
+|                                +-------------------------+  |
+|                                | Physical Source Files   |  |
+|                                | (*.tsx, *.jsx)          |  |
+|                                +-------------------------+  |
++-------------------------------------------------------------+
 ```
 
 ---
 
-## Phase 0: Groundwork & Architecture Validation (Week 1) [COMPLETED]
-**Goal:** Prove the round-trip pipeline from DOM selection $\to$ file coordinates $\to$ AST update $\to$ HMR refresh.
+## Foundation Phases (Completed)
 
-- [x] **Repository Setup & Monorepo Scaffold**
-  - Setup package structure:
-    - `packages/cli`: CLI launcher (`npx flimsy dev`).
-    - `packages/vite-plugin`: Vite middleware & transform hooks.
-    - `packages/core`: AST parser, Tailwind reconciler, file I/O engine.
-    - `packages/overlay`: Web UI overlay (vanilla Web Component in Shadow DOM).
-  - Setup a sample testbed app: React 19 + Vite 6 + Tailwind CSS 3.
-- [x] **Proof of Concept: Source Location Injection**
-  - Implement a Babel/SWC AST transform during Vite dev build.
-  - Automatically stamp JSX elements with metadata:
-    ```html
-    <button data-flimsy-file="src/components/Hero.tsx" data-flimsy-line="16" data-flimsy-col="8">
-    ```
-- [x] **Proof of Concept: The Round Trip**
-  - Verified that clicking a tagged element, reading `data-flimsy-*`, sending a POST payload to Vite server, mutating the target file with text/classes, and seeing Vite HMR update works seamlessly without page refresh.
+### Phase 0: Groundwork & Architecture Validation [COMPLETED]
+- Repository setup with unified `flimsy-dev` package.
+- Proof of concept: Source location injection (`data-flimsy-*`).
+- Round-trip pipeline validation (DOM selection -> file coordinates -> AST update -> HMR refresh).
 
----
+### Phase 1: Injected Visual Overlay & DOM Inspector [COMPLETED]
+- Shadow DOM UI isolation (`attachShadow({ mode: 'open' })`).
+- Deep element selection and boundary highlighting.
+- Nested component hierarchy breadcrumb.
+- Global activation shortcuts (`Alt + X`, `Esc`).
 
-## Phase 1: Injected Visual Overlay & DOM Inspector (Weeks 2–3) [COMPLETED]
-**Goal:** Build a non-destructive, Figma-like selection and inspection experience in the browser.
+### Phase 2: Visual Property Controls & Live Preview [COMPLETED]
+- In-situ inline text editing via `contentEditable`.
+- Discrete controls for typography, padding presets, and basic layout.
+- Real-time optimistic client preview with single atomic "Sync to Code".
 
-- [x] **Shadow DOM UI Isolation**
-  - Mounted Flimsy UI inside an isolated Shadow DOM container (`attachShadow({ mode: 'open' })`) preventing any style leakage to or from the host application.
-- [x] **Interactive Hover & Click Selector**
-  - Deep element picker: hover highlights element bounds with smooth outline, dimension badge ($W \times H$), and corner handles.
-  - Element info badge: displays tag name, component context, dimensions ($W \times H$), and source file + line.
-  - Nested hierarchy breadcrumb: computes full parent hierarchy trail (`App:<main> › Hero:<div> › <button>`), allowing one-click selection of ancestor containers.
-  - Global toggle shortcut (`Alt + X` or floating toggle pill) to enable/disable visual inspect mode seamlessly; `Esc` to close or deselect.
-- [x] **Component Boundary Detection**
-  - Distinguishes between native HTML element (`<button>`) and custom component boundary (`<Hero />`).
-  - Displays component context and scope (`Component Definition` vs invocation layout).
+### Phase 3: AST Transformation & Code Synchronization Engine [COMPLETED]
+- AST parsing and formatting preservation using `recast`.
+- Smart Tailwind class conflict reconciliation.
+- Multi-format support: string literals, template strings, and `cn()` / `clsx()` utility helpers.
+- Pre-write syntax validation guarding against file corruption.
 
----
+### Phase 4: Change Management, Diff Review & Safety [COMPLETED]
+- Studio Diff review block showing pending Tailwind class additions and deletions.
+- Full session Undo/Redo buffer (`Ctrl+Z` / `Ctrl+Y`).
+- Multi-instance component detection and warning.
+- External file modification detection.
 
-## Phase 2: Visual Property Controls & Live Preview (Weeks 4–5) [COMPLETED]
-**Goal:** Provide an intuitive property panel (similar to Figma/DevTools) that lets developers visually tweak common UI styling.
+### Phase 5: Distribution & Packaging [COMPLETED]
+- Zero-config CLI (`npx flimsy-dev@latest dev`).
+- Standalone Vite plugin registration (`flimsy-dev/vite`).
+- Telemetry-free, 100% local-first architecture.
+- Production safety verification (zero bytes leaked in production builds).
 
-- [x] **Typography Controls**
-  - Direct double-click text editing (enables in-situ `contentEditable` directly on the webpage element).
-  - Clean typography controls: font size (`xs` to `2xl`), weight (`Regular` to `Bold`), alignment (`Left`, `Center`, `Right`).
-  - Swatch-based color theme palette with instant contrast matching.
-- [x] **Spacing & Sizing (Box Model)**
-  - Segmented controls for padding (`p-0` through `p-8`) and border radius (`none`, `md`, `lg`, `xl`, `full`).
-  - Real-time dimension badge updating dynamically on element mutation.
-- [x] **Styling & Layout Controls**
-  - Instant theme color swatches (`slate`, `sky`, `emerald`, `indigo`, `rose`, `white`, `transparent`).
-  - Layout & flex toggles: direction (`row`, `col`), justification (`start`, `center`, `between`).
-- [x] **Instant Optimistic Preview**
-  - Zero-lag, category-aware client preview: class and text mutations apply immediately in-memory to the live DOM before syncing.
-- [x] **Multi-Action Atomic Sync**
-  - Single unified "Sync to Code" action supporting combined text and class mutations in one atomic AST write.
+### Phase 6: Optional AI Enhancement Layer [COMPLETED]
+- Context-aware element prompt extractor (`extractAIElementContext`).
+- Offline design heuristics and preset style injection into live diff preview.
 
 ---
 
-## Phase 3: AST Transformation & Code Synchronization Engine (Weeks 6–7) [COMPLETED]
-**Goal:** Cleanly, deterministically update physical `.tsx` / `.jsx` files without breaking code structure, formatting, or comments.
+## Figma-Grade Parity Phases [COMPLETED]
 
-- [x] **AST Parsing & Formatting Preservation**
-  - Uses `recast` with Babel TSX/JSX parser ensuring 100% of untouched code, comments, and whitespace remain identical.
-- [x] **Smart Tailwind Class Reconciler**
-  - Parses existing `className` attributes with category awareness.
-  - Intelligent multi-axis conflict resolution:
-    - Master padding (`p-6`) cleans up directional padding (`px-4`, `py-2`).
-    - Updating background color (`bg-emerald-500`) preserves hover variants (`hover:bg-blue-600`) and text colors (`text-white`).
-  - Class name format support:
-    - String literals: `className="bg-white p-4"`
-    - Template strings: `className={`p-4 bg-white ${active ? '...' : ''}`}` (safely updating static quasi strings without corrupting `${...}` expressions).
-    - Utility helpers: Native support for `cn(...)`, `clsx(...)`, and `cva(...)` function call arguments (shadcn/ui compatibility).
-- [x] **Text Node AST Sync**
-  - Safely replaces target `JSXText` nodes while preserving all surrounding `JSXExpressionContainer` dynamic expressions (e.g. `Hello, {name}!`).
-- [x] **Atomic File Writing with Pre-write Syntax Validation**
-  - Validates AST output against Babel parser before disk write; automatically aborts with safety rollback if syntax validation fails, ensuring developer files are never corrupted.
+### Phase 7: Interactive Canvas Transform & 8-Point Bounding Box [COMPLETED]
+**Goal:** Enable direct on-canvas stretching and resizing of any DOM element matching Figma's selection behavior.
+
+- [x] **8-Point Handle Overlay:**
+  - Added 8 interactive resize handles to `.flimsy-select-box` (North, South, East, West, corners).
+  - Dynamic cursor mapping (`nwse-resize`, `nesw-resize`, `ew-resize`, `ns-resize`).
+- [x] **Drag-to-Resize Math & Snapping:**
+  - Coordinate tracking on pointer events calculating real-time delta width and height.
+  - Snap-to-grid mapping against Tailwind scale (`w-16`, `w-24`, `w-32`, `w-48`, `w-64`, `w-full`, etc.).
+  - Freeform mode with arbitrary values (`w-[280px]`, `h-[120px]`).
+- [x] **Optimistic High-FPS Canvas Updates:**
+  - Updates element styles directly during active drag for 60fps performance without re-parsing AST every frame.
+  - Reconciles final dimensions to Tailwind classes and stages AST write on pointer release.
 
 ---
 
-## Phase 4: Change Management, Diff Review & Safety (Week 8) [COMPLETED]
-**Goal:** Give developers full visibility and trust over the changes applied to their code.
+### Phase 8: Universal Color System & Property Targeting [COMPLETED]
+**Goal:** Eliminate the 7-swatch limitation with a complete color spectrum picker and dedicated property targets.
 
-- [x] **Pending Changes & Diff Preview Drawer**
-  - Integrated, expandable diff block inside the Studio Panel showing real-time added/deleted Tailwind classes and text changes.
-  - Dedicated "Reset" action to discard pending changes with one click.
-- [x] **Undo / Redo Buffer**
-  - Full session history stack supporting `Ctrl+Z` / `Cmd+Z` (Undo) and `Ctrl+Y` / `Cmd+Shift+Z` (Redo).
-  - Minimalist `↶` and `↷` toolbar buttons with dynamic active/disabled states.
-- [x] **Multiple Instance Warning**
-  - Automatically scans the live DOM for shared component usages (`document.querySelectorAll('[data-flimsy-file="..."]')`).
-  - Alerts developer with a subtle amber badge when modifying a component rendered in multiple places (e.g. `⚠️ 2 instances on page`).
-- [x] **External File Modification Detection**
-  - Records file `mtime` upon selection and inspects disk state prior to writing.
-  - Warns developer if the file was modified in VS Code or externally while Flimsy was open, providing "Force Overwrite" safety gates.
-
----
-
-## Phase 5: Distribution, NPX Packaging & Polish (Weeks 9–10) [COMPLETED]
-**Goal:** Provide a seamless 5-second developer setup experience.
-
-- [x] **Zero-Config CLI (`npx flimsy dev`)**
-  - Enhanced CLI executable (`packages/cli/bin/flimsy.js`) supporting `--port`, `--host`, `--open`, and graceful termination.
-  - Automatically locates Vite in the project root and launches the dev server with Flimsy visual editing pre-configured.
-- [x] **Standalone Vite Plugin Option (`@flimsy/vite`)**
-  - Fully typed package manifests (`package.json`), dual exports, MIT license, and publishing configurations across all monorepo packages.
-- [x] **Compatibility Testing & Production Safety Guarantee**
-  - Automated production build tests (`packages/vite-plugin/test/production-safety.test.ts`) guaranteeing zero Flimsy code or debug attributes in production bundles.
-- [x] **Telemetry-Free, Local-First Guarantee**
-  - 100% offline-ready, zero telemetry, zero analytics tracking. Comprehensive root `README.md` and documentation.
+- [x] **Figma-Style Color Popover:**
+  - Spectrum saturation-lightness box, hue bar, and hex/rgb input.
+  - Native browser eyedropper tool integration (`window.EyeDropper`).
+- [x] **Dedicated Property Targets:**
+  - Fill (`bg-[color]`, `bg-[color]/[alpha]`).
+  - Stroke (`border-[color]`, `border-[color]/[alpha]`).
+  - Text (`text-[color]`, `text-[color]/[alpha]`).
+- [x] **Full Tailwind Palette Browser:**
+  - Curated palette chips supporting cream, gold, charcoal, sky, emerald, rose, indigo, amber, and white.
+- [x] **Alpha Opacity Slider:**
+  - Direct manipulation of Tailwind opacity modifiers (e.g. `bg-amber-500/80`).
 
 ---
 
-## Phase 6: Optional AI Enhancement Layer (Future / Post-MVP) [COMPLETED]
-**Goal:** Enable contextual AI queries for complex tasks without forcing AI into simple edits.
+### Phase 9: Figma Auto Layout 5.0 Engine [COMPLETED]
+**Goal:** Replace rigid layout pills with Figma's industry-standard Auto Layout controls.
 
-- [x] **Context-Aware Prompting & Packaging (`extractAIElementContext`)**
-  - User selects element $\to$ opens optional collapsible **AI Assist** drawer.
-  - Flimsy extracts exact AST target snippet, parent container context, file/line coordinates, and current Tailwind classes.
-  - Provides **1-click Copy Prompt** (`📋 Copy`) formatted cleanly for external AI tools like Claude Code or Cursor.
-- [x] **Offline Design Heuristics & Live Diff Review (`resolveDesignHeuristic`)**
-  - Includes quick prompt chips (*Glass*, *Gradient*, *Glow*, *Card*) and built-in zero-token Tailwind style heuristics (`/__flimsy/api/ai`).
-  - Streams AI style adjustments directly into the live canvas preview and Flimsy Diff Preview drawer for undoable inspection and 1-click `Sync to Code`.
+- [x] **9-Point Alignment Grid Box:**
+  - Interactive 3x3 alignment matrix mapping directly to flexbox combinations (`items-*` and `justify-*`).
+- [x] **Direction & Wrap Controls:**
+  - Row, Column, and Flex Wrap toggles.
+- [x] **Gap Scrubber:**
+  - Segmented buttons for container gaps (`gap-0` to `gap-8`).
+- [x] **Sizing Constraints:**
+  - Hug Contents (`w-fit`), Fill Container (`w-full`), and Auto (`w-auto`).
+- [x] **Per-Side Padding & Margin:**
+  - 4-way box inputs (Top, Right, Bottom, Left) with linked/unlinked toggle.
+
+---
+
+### Phase 10: Borders, Independent Radii & Visual Effects [COMPLETED]
+**Goal:** Precision controls for curves, strokes, and glassmorphic elevations.
+
+- [x] **Independent 4-Corner Radius:**
+  - Individual inputs for Top-Left (`rounded-tl-*`), Top-Right (`rounded-tr-*`), Bottom-Right (`rounded-br-*`), and Bottom-Left (`rounded-bl-*`).
+- [x] **Border Stroke Controls:**
+  - Stroke width (0px, 1px, 2px, 4px) and style (solid, dashed, dotted).
+- [x] **Visual Effects:**
+  - Drop Shadow elevation presets (`shadow-none` through `shadow-2xl`).
+  - Backdrop Blur slider (`backdrop-blur-none` through `backdrop-blur-lg`).
+  - Layer Opacity slider (`opacity-0` through `opacity-100`).
+
+---
+
+### Phase 11: Interactive Layers Tree & AST Actions [COMPLETED]
+**Goal:** Turn the Layers panel into an active JSX hierarchy management tool.
+
+- [x] **Reorder Sibling Layers:**
+  - Move Up and Move Down actions swapping physical `JSXElement` nodes within parent children array in `.tsx` file.
+- [x] **Layer Action Toolbar:**
+  - Delete action (`Delete` icon and `Delete` / `Backspace` key removes JSX element from AST).
+  - Duplicate action (`Duplicate` icon and `Ctrl+D` / `Cmd+D` clones JSX element in AST).
+- [x] **Direct Editor Deep Link:**
+  - Displays source file and line in breadcrumb with click navigation.
+
+---
+
+### Phase 12: On-Canvas Spacing Scrubbers & Smart Guides [COMPLETED]
+**Goal:** Direct visual feedback on the live rendered DOM.
+
+- [x] **Dynamic Dimension & Coordinate Guides:**
+  - Live dimension badge updating dynamically during drag.
+- [x] **Distance Measurement Guides:**
+  - Holding `Alt` while hovering over another element displays distance lines and pixel measurements.
 
 ---
 
@@ -163,11 +169,9 @@
 
 | Milestone | Deliverable | Success Criteria |
 |---|---|---|
-| **M0 (PoC)** | Round-trip pipeline | Click button $\to$ update file $\to$ HMR reloads in < 200ms. |
-| **M1 (Inspector)** | Shadow DOM overlay | Inspect elements without style bleeding or breaking app state. |
-| **M2 (Controls)** | Property panel | Visual controls for typography, padding/margin, and colors. |
-| **M3 (AST Sync)** | AST engine | Clean Tailwind class updates in `.tsx` files without corrupting code. |
-| **M4 (Safety)** | Diff & Undo | Diff viewer and multi-instance guard. |
-| **M5 (MVP Release)** | NPX CLI | `npx flimsy dev` works out of the box on a fresh React + Tailwind project. |
-| **M6 (AI Layer)** | AI Context & Heuristics | Optional zero-token style heuristics + clipboard prompt export into live diff preview. |
-
+| **Phase 7** | 8-Point Canvas Stretch Handles | Drag handles stretch elements smoothly and generate clean Tailwind width/height classes. |
+| **Phase 8** | Full Color Picker + Targeting | Pick any custom hex/alpha color for background, border, or text. |
+| **Phase 9** | Auto Layout Matrix & Sizing | 9-point alignment box, Hug/Fill constraints, and per-side padding. |
+| **Phase 10** | Independent Radii & Effects | Configure 4 independent corner curves, borders, and drop shadows. |
+| **Phase 11** | Interactive AST Layers Actions | Drag layers to reorder JSX in `.tsx`, duplicate, or delete elements. |
+| **Phase 12** | On-Canvas Spacing Guides | Drag padding directly on the live canvas with distance guides. |

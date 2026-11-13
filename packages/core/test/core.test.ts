@@ -309,6 +309,61 @@ export function Button({ isPrimary }: { isPrimary: boolean }) {
     });
   });
 
+  it('reconciles width, height, borders, and independent corners without collision', () => {
+    const existing = 'w-32 h-10 border border-slate-300 border-solid rounded-md p-4';
+    const updated = reconcileClasses(
+      existing,
+      'w-64 h-16 border-2 border-dashed border-[#d9b25f] rounded-tl-lg'
+    );
+    expect(updated).toContain('w-64');
+    expect(updated).not.toContain('w-32');
+    expect(updated).toContain('h-16');
+    expect(updated).not.toContain('h-10');
+    expect(updated).toContain('border-2');
+    expect(updated).toContain('border-dashed');
+    expect(updated).toContain('border-[#d9b25f]');
+    expect(updated).toContain('rounded-tl-lg');
+    expect(updated).toContain('rounded-md'); // master preserved alongside independent corner
+    expect(updated).toContain('p-4');
+  });
+
+  it('performs structural AST operations: duplicate, reorder, and delete element', async () => {
+    const sampleFilePath = path.join(tempDir, 'List.tsx');
+    const initialContent = `export function List() {
+  return (
+    <div>
+      <span className="first">Item 1</span>
+      <span className="second">Item 2</span>
+    </div>
+  );
+}`;
+    await fs.writeFile(sampleFilePath, initialContent, 'utf-8');
+
+    // 1. Duplicate "Item 1"
+    const dupRes = await updateSourceFile({
+      filePath: sampleFilePath,
+      line: 4,
+      column: 6,
+      action: { type: 'duplicate-element' },
+      rootDir: tempDir,
+    });
+    expect(dupRes.success).toBe(true);
+    expect(dupRes.newCode).toContain('Item 1');
+    const matches = dupRes.newCode?.match(/Item 1/g);
+    expect(matches?.length).toBe(2);
+
+    // 2. Delete "Item 2"
+    const delRes = await updateSourceFile({
+      filePath: sampleFilePath,
+      line: 6,
+      column: 6,
+      action: { type: 'delete-element' },
+      rootDir: tempDir,
+    });
+    expect(delRes.success).toBe(true);
+    expect(delRes.newCode).not.toContain('Item 2');
+  });
+
   it('extracts structured AI element context and formats prompt', async () => {
     const sampleFilePath = path.join(tempDir, 'Card.tsx');
     const initialContent = `export function Card() {

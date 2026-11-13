@@ -62,6 +62,7 @@ export async function updateSourceFile(
   // Find target element by line and column
   let targetElementNode: any = null;
   let targetOpeningNode: any = null;
+  let targetPathNode: any = null;
   let minColDiff = Infinity;
 
   traverse(ast, {
@@ -76,6 +77,7 @@ export async function updateSourceFile(
           minColDiff = colDiff;
           targetElementNode = pathNode.node;
           targetOpeningNode = opening;
+          targetPathNode = pathNode;
         }
       }
     },
@@ -95,6 +97,7 @@ export async function updateSourceFile(
             minColDiff = colDiff;
             targetElementNode = pathNode.node;
             targetOpeningNode = opening;
+            targetPathNode = pathNode;
           }
         }
       },
@@ -112,10 +115,10 @@ export async function updateSourceFile(
   // Apply action(s)
   if (options.actions && Array.isArray(options.actions)) {
     for (const act of options.actions) {
-      applyAction(targetElementNode, targetOpeningNode, act);
+      applyAction(targetElementNode, targetOpeningNode, targetPathNode, act);
     }
   } else if (options.action) {
-    applyAction(targetElementNode, targetOpeningNode, options.action);
+    applyAction(targetElementNode, targetOpeningNode, targetPathNode, options.action);
   }
 
   let newCode: string;
@@ -208,8 +211,71 @@ export function generateDiffPreview(
 function applyAction(
   elementNode: any,
   openingNode: any,
+  targetPathNode: any,
   action: UpdateAction
 ): void {
+  if (action.type === 'delete-element') {
+    if (targetPathNode && typeof targetPathNode.remove === 'function') {
+      targetPathNode.remove();
+    }
+    return;
+  }
+
+  if (action.type === 'duplicate-element') {
+    if (targetPathNode && typeof targetPathNode.insertAfter === 'function') {
+      try {
+        const printed = recast.print(targetPathNode.node).code;
+        const parsedClone = recast.parse(printed, {
+          parser: {
+            parse(source: string) {
+              return babelParser.parse(source, {
+                sourceType: 'module',
+                plugins: ['jsx', 'typescript'],
+                tokens: true,
+              });
+            },
+          },
+        });
+        const clonedNode = parsedClone.program.body[0]?.expression || targetPathNode.node;
+        targetPathNode.insertAfter(clonedNode);
+      } catch {
+        targetPathNode.insertAfter(targetPathNode.node);
+      }
+    }
+    return;
+  }
+
+  if (action.type === 'reorder-child') {
+    if (targetPathNode && targetPathNode.parent && Array.isArray(targetPathNode.parent.children)) {
+      const children = targetPathNode.parent.children;
+      const idx = children.indexOf(targetPathNode.node);
+      if (idx !== -1) {
+        if (action.direction === 'up' && idx > 0) {
+          let prevIdx = idx - 1;
+          while (prevIdx >= 0 && children[prevIdx].type === 'JSXText' && !children[prevIdx].value.trim()) {
+            prevIdx--;
+          }
+          if (prevIdx >= 0) {
+            const temp = children[idx];
+            children[idx] = children[prevIdx];
+            children[prevIdx] = temp;
+          }
+        } else if (action.direction === 'down' && idx < children.length - 1) {
+          let nextIdx = idx + 1;
+          while (nextIdx < children.length && children[nextIdx].type === 'JSXText' && !children[nextIdx].value.trim()) {
+            nextIdx++;
+          }
+          if (nextIdx < children.length) {
+            const temp = children[idx];
+            children[idx] = children[nextIdx];
+            children[nextIdx] = temp;
+          }
+        }
+      }
+    }
+    return;
+  }
+
   if (action.type === 'update-text') {
     // If element has JSXText child, update it
     let foundText = false;
@@ -385,7 +451,7 @@ export function getTailwindPropertyPrefix(cls: string): string | null {
     return withVariant('font-size');
   }
 
-  // 3. Text colors (e.g. text-white, text-sky-400, text-transparent)
+  // 3. Text colors (e.g. text-white, text-sky-400, text-transparent, text-[#...])
   if (base.startsWith('text-')) {
     return withVariant('text-color');
   }
@@ -395,8 +461,12 @@ export function getTailwindPropertyPrefix(cls: string): string | null {
     return withVariant('font-weight');
   }
 
-  // 5. Border radius
-  if (/^rounded(-none|-sm|-md|-lg|-xl|-2xl|-3xl|-full)?$/.test(base)) {
+  // 5. Border radius (independent corners vs master)
+  if (/^rounded-(tl|tr|br|bl|t|b|l|r)(-none|-sm|-md|-lg|-xl|-2xl|-3xl|-full|(\[[^\]]+\]))?$/.test(base)) {
+    const corner = base.match(/^rounded-(tl|tr|br|bl|t|b|l|r)/)?.[1];
+    return withVariant(`border-radius-${corner}`);
+  }
+  if (/^rounded(-none|-sm|-md|-lg|-xl|-2xl|-3xl|-full|(\[[^\]]+\]))?$/.test(base)) {
     return withVariant('border-radius');
   }
 
@@ -405,12 +475,20 @@ export function getTailwindPropertyPrefix(cls: string): string | null {
     return withVariant('box-shadow');
   }
 
-  // 7. Flex direction
+  // 7. Backdrop blur
+  if (base.startsWith('backdrop-blur')) {
+    return withVariant('backdrop-blur');
+  }
+
+  // 8. Flex direction & wrap
   if (/^flex-(row|col|row-reverse|col-reverse)$/.test(base)) {
     return withVariant('flex-direction');
   }
+  if (/^flex-(wrap|nowrap|wrap-reverse)$/.test(base)) {
+    return withVariant('flex-wrap');
+  }
 
-  // 8. Align items & Justify content
+  // 9. Align items & Justify content
   if (/^items-(start|center|end|baseline|stretch)$/.test(base)) {
     return withVariant('align-items');
   }
@@ -418,7 +496,24 @@ export function getTailwindPropertyPrefix(cls: string): string | null {
     return withVariant('justify-content');
   }
 
-  // 9. Standard utility prefixes
+  // 10. Border styling
+  if (/^border-(solid|dashed|dotted|double|none)$/.test(base)) {
+    return withVariant('border-style');
+  }
+  if (/^border(-[0-9]+|(\[[0-9]+px\]))?$/.test(base) || base === 'border') {
+    return withVariant('border-width');
+  }
+  if (base.startsWith('border-')) {
+    return withVariant('border-color');
+  }
+
+  // 11. Dimensions & Spacing
+  if (/^w-/.test(base)) return withVariant('width');
+  if (/^h-/.test(base)) return withVariant('height');
+  if (/^gap-/.test(base)) return withVariant('gap');
+  if (/^opacity-/.test(base)) return withVariant('opacity');
+
+  // 12. Standard utility prefixes
   const standardPrefixes = [
     'bg-',
     'p-',
@@ -435,22 +530,12 @@ export function getTailwindPropertyPrefix(cls: string): string | null {
     'mr-',
     'mb-',
     'ml-',
-    'w-',
-    'h-',
-    'gap-',
-    'border-',
-    'opacity-',
   ];
 
   for (const p of standardPrefixes) {
     if (base.startsWith(p)) {
       return withVariant(p);
     }
-  }
-
-  // Base border toggle
-  if (base === 'border') {
-    return withVariant('border-width');
   }
 
   return null;
