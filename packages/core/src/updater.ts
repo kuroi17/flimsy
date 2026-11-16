@@ -446,8 +446,8 @@ export function getTailwindPropertyPrefix(cls: string): string | null {
     return withVariant('text-align');
   }
 
-  // 2. Font sizes
-  if (/^text-([0-9]?xl|xs|sm|base|lg)$/.test(base)) {
+  // 2. Font sizes (including arbitrary px like text-[28px])
+  if (/^text-([0-9]?xl|xs|sm|base|lg|(\[\d+(px|rem|em)\]))$/.test(base)) {
     return withVariant('font-size');
   }
 
@@ -456,7 +456,12 @@ export function getTailwindPropertyPrefix(cls: string): string | null {
     return withVariant('text-color');
   }
 
-  // 4. Font weights
+  // 4. Font families (e.g. font-sans, font-mono, font-['Inter'])
+  if (/^font-(sans|serif|mono|(\[[^\]]+\]))$/.test(base)) {
+    return withVariant('font-family');
+  }
+
+  // 5. Font weights
   if (/^font-(thin|extralight|light|normal|medium|semibold|bold|extrabold|black)$/.test(base)) {
     return withVariant('font-weight');
   }
