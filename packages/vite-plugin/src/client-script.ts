@@ -1249,6 +1249,12 @@ export const clientScript = `
         <button class="seg-btn" data-class="font-semibold">Semi</button>
         <button class="seg-btn" data-class="font-bold">Bold</button>
       </div>
+      <div class="segmented" id="seg-text-align">
+        <button class="seg-btn" data-class="text-left" title="Align Left">Left</button>
+        <button class="seg-btn" data-class="text-center" title="Align Center">Center</button>
+        <button class="seg-btn" data-class="text-right" title="Align Right">Right</button>
+        <button class="seg-btn" data-class="text-justify" title="Align Justify">Justify</button>
+      </div>
     </div>
 
     <!-- Borders & Independent Radii -->

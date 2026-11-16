@@ -52,7 +52,9 @@ export function flimsy(options: FlimsyOptions = {}): Plugin {
       server.middlewares.use(async (req, res, next) => {
         if (req.url === '/@flimsy/client.js') {
           res.setHeader('Content-Type', 'application/javascript');
-          res.setHeader('Cache-Control', 'no-cache');
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+          res.setHeader('Pragma', 'no-cache');
+          res.setHeader('Expires', '0');
           res.end(clientScript);
           return;
         }
