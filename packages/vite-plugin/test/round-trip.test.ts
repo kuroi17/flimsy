@@ -61,6 +61,15 @@ describe('Vite Plugin Round-trip Integration', () => {
     expect(script).toContain('flimsy-ai-toggle');
     expect(script).toContain('flimsy-ai-copy');
     expect(script).toContain('contentEditable');
+    expect(script).toContain('flimsy-rotate-handle');
+    expect(script).toContain('flimsy-measure-layer');
+    expect(script).toContain('flimsy-snap-toggle');
+    expect(script).toContain('flimsy-opacity-slider');
+    expect(script).toContain('flimsy-border-side-btn');
+    expect(script).toContain('seg-leading');
+    expect(script).toContain('seg-tracking');
+    expect(script).toContain('seg-text-transform');
+    expect(script).toContain('reparent-element');
   });
 
   it('inspects file metadata at /__flimsy/api/inspect', async () => {
@@ -123,6 +132,49 @@ describe('Vite Plugin Round-trip Integration', () => {
     expect(updatedDiskContent).toContain('Live Studio Verified');
     expect(updatedDiskContent).toContain('bg-emerald-500');
     expect(updatedDiskContent).toContain('rounded-xl');
+  });
+
+  it('handles atomic batch updates for multi-selected elements in the same file', async () => {
+    // Restore clean Hero first
+    await fs.writeFile(heroFilePath, originalHeroContent, 'utf-8');
+    const resModule = await fetch(`${serverUrl}/src/components/Hero.tsx`);
+    const code = await resModule.text();
+
+    const h1Match = code.match(/"h1",\s*\{[^}]*"data-flimsy-file":\s*"src\/components\/Hero\.tsx",\s*"data-flimsy-line":\s*"(\d+)",\s*"data-flimsy-col":\s*"(\d+)"/);
+    const pMatch = code.match(/"p",\s*\{[^}]*"data-flimsy-file":\s*"src\/components\/Hero\.tsx",\s*"data-flimsy-line":\s*"(\d+)",\s*"data-flimsy-col":\s*"(\d+)"/);
+    expect(h1Match).not.toBeNull();
+    expect(pMatch).not.toBeNull();
+
+    const batchRes = await fetch(`${serverUrl}/__flimsy/api/update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        updates: [
+          {
+            file: 'src/components/Hero.tsx',
+            line: parseInt(h1Match![1], 10),
+            col: parseInt(h1Match![2], 10),
+            actions: [{ type: 'update-class', newClasses: 'uppercase tracking-widest', mode: 'reconcile' }],
+          },
+          {
+            file: 'src/components/Hero.tsx',
+            line: parseInt(pMatch![1], 10),
+            col: parseInt(pMatch![2], 10),
+            actions: [{ type: 'update-class', newClasses: 'leading-loose opacity-75', mode: 'reconcile' }],
+          },
+        ],
+      }),
+    });
+
+    expect(batchRes.status).toBe(200);
+    const data = await batchRes.json();
+    expect(data.success).toBe(true);
+
+    const disk = await fs.readFile(heroFilePath, 'utf-8');
+    expect(disk).toContain('uppercase');
+    expect(disk).toContain('tracking-widest');
+    expect(disk).toContain('leading-loose');
+    expect(disk).toContain('opacity-75');
   });
 
   it('provides AI context packaging and offline heuristics at /__flimsy/api/ai', async () => {

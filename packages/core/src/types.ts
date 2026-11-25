@@ -18,6 +18,12 @@ export type UpdateAction =
   | {
       type: 'reorder-child';
       direction: 'up' | 'down';
+    }
+  | {
+      type: 'reparent-element';
+      targetLine: number;
+      targetColumn: number;
+      position: 'inside' | 'before' | 'after';
     };
 
 export interface UpdateSourceOptions {

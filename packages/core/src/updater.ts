@@ -115,10 +115,10 @@ export async function updateSourceFile(
   // Apply action(s)
   if (options.actions && Array.isArray(options.actions)) {
     for (const act of options.actions) {
-      applyAction(targetElementNode, targetOpeningNode, targetPathNode, act);
+      applyAction(ast, targetElementNode, targetOpeningNode, targetPathNode, act);
     }
   } else if (options.action) {
-    applyAction(targetElementNode, targetOpeningNode, targetPathNode, options.action);
+    applyAction(ast, targetElementNode, targetOpeningNode, targetPathNode, options.action);
   }
 
   let newCode: string;
@@ -208,7 +208,54 @@ export function generateDiffPreview(
   };
 }
 
+function findJSXPathByLocation(ast: any, line: number, column: number): any {
+  let matched: any = null;
+  let minColDiff = Infinity;
+
+  traverse(ast, {
+    JSXElement(pathNode: any) {
+      const opening = pathNode.node.openingElement;
+      if (!opening || !opening.loc) return;
+      if (opening.loc.start.line === line) {
+        const colDiff = Math.abs(opening.loc.start.column - column);
+        if (colDiff < minColDiff) {
+          minColDiff = colDiff;
+          matched = pathNode;
+        }
+      }
+    },
+  });
+
+  if (!matched) {
+    traverse(ast, {
+      JSXElement(pathNode: any) {
+        const opening = pathNode.node.openingElement;
+        if (!opening || !opening.loc) return;
+        if (Math.abs(opening.loc.start.line - line) <= 1) {
+          const colDiff = Math.abs(opening.loc.start.column - column);
+          if (colDiff < minColDiff) {
+            minColDiff = colDiff;
+            matched = pathNode;
+          }
+        }
+      },
+    });
+  }
+
+  return matched;
+}
+
+function isDescendantPath(possibleDescendant: any, ancestorNode: any): boolean {
+  let cur = possibleDescendant;
+  while (cur) {
+    if (cur.node === ancestorNode) return true;
+    cur = cur.parentPath;
+  }
+  return false;
+}
+
 function applyAction(
+  ast: any,
   elementNode: any,
   openingNode: any,
   targetPathNode: any,
@@ -217,6 +264,40 @@ function applyAction(
   if (action.type === 'delete-element') {
     if (targetPathNode && typeof targetPathNode.remove === 'function') {
       targetPathNode.remove();
+    }
+    return;
+  }
+
+  if (action.type === 'reparent-element') {
+    if (!targetPathNode || !ast) return;
+    const destPath = findJSXPathByLocation(ast, action.targetLine, action.targetColumn);
+    if (!destPath || destPath.node === targetPathNode.node) return;
+    // Prevent moving a parent into itself or one of its own descendants
+    if (isDescendantPath(destPath, targetPathNode.node)) return;
+
+    const movingNode = targetPathNode.node;
+
+    if (action.position === 'inside') {
+      const destNode = destPath.node;
+      // Convert self-closing JSX element into open/close element if needed
+      if (destNode.openingElement?.selfClosing) {
+        destNode.openingElement.selfClosing = false;
+        destNode.closingElement = b.jsxClosingElement(destNode.openingElement.name);
+      }
+      if (!Array.isArray(destNode.children)) {
+        destNode.children = [];
+      }
+      // Remove from current parent first, then append inside destination
+      targetPathNode.remove();
+      destNode.children.push(movingNode);
+    } else if (destPath.parent && Array.isArray(destPath.parent.children)) {
+      targetPathNode.remove();
+      const destChildren = destPath.parent.children;
+      const destIdx = destChildren.indexOf(destPath.node);
+      if (destIdx !== -1) {
+        const insertIdx = action.position === 'before' ? destIdx : destIdx + 1;
+        destChildren.splice(insertIdx, 0, movingNode);
+      }
     }
     return;
   }
@@ -346,20 +427,46 @@ function applyAction(
           firstQuasi.value.raw = updated ? (updated + ' ') : '';
           firstQuasi.value.cooked = firstQuasi.value.raw;
         }
-        // CallExpression: className={cn('p-4 bg-white', isSpecial && '...')}
-        else if (expr?.type === 'CallExpression' && expr.arguments?.length > 0) {
-          const firstArg = expr.arguments[0];
-          if (firstArg.type === 'StringLiteral') {
-            const existingClasses = firstArg.value || '';
+        // CallExpression: className={cn('p-4 bg-white', isSpecial && '...')} or clsx(base, 'p-4')
+        else if (expr?.type === 'CallExpression' && Array.isArray(expr.arguments)) {
+          const strArg = expr.arguments.find((arg: any) => arg?.type === 'StringLiteral');
+          if (strArg) {
+            const existingClasses = strArg.value || '';
             const updated = reconcileClasses(
               existingClasses,
               action.newClasses,
               action.removeClasses,
               action.mode
             );
-            firstArg.value = updated;
-            if (firstArg.extra) {
-              firstArg.extra.raw = JSON.stringify(updated);
+            strArg.value = updated;
+            if (strArg.extra) {
+              strArg.extra.raw = JSON.stringify(updated);
+            }
+          } else {
+            const tplArg = expr.arguments.find(
+              (arg: any) => arg?.type === 'TemplateLiteral' && arg.quasis?.length > 0
+            );
+            if (tplArg) {
+              const firstQuasi = tplArg.quasis[0];
+              const existingClasses = firstQuasi.value.raw || '';
+              const updated = reconcileClasses(
+                existingClasses,
+                action.newClasses,
+                action.removeClasses,
+                action.mode
+              );
+              firstQuasi.value.raw = updated ? (updated + ' ') : '';
+              firstQuasi.value.cooked = firstQuasi.value.raw;
+            } else {
+              const cleaned = reconcileClasses(
+                '',
+                action.newClasses,
+                action.removeClasses,
+                action.mode
+              );
+              if (cleaned) {
+                expr.arguments.unshift(b.stringLiteral(cleaned));
+              }
             }
           }
         }
@@ -466,7 +573,18 @@ export function getTailwindPropertyPrefix(cls: string): string | null {
     return withVariant('font-weight');
   }
 
-  // 5. Border radius (independent corners vs master)
+  // 5b. Line height, letter spacing, text transform
+  if (/^leading-/.test(base)) {
+    return withVariant('line-height');
+  }
+  if (/^tracking-/.test(base)) {
+    return withVariant('letter-spacing');
+  }
+  if (/^(uppercase|lowercase|capitalize|normal-case)$/.test(base)) {
+    return withVariant('text-transform');
+  }
+
+  // 6. Border radius (independent corners vs master)
   if (/^rounded-(tl|tr|br|bl|t|b|l|r)(-none|-sm|-md|-lg|-xl|-2xl|-3xl|-full|(\[[^\]]+\]))?$/.test(base)) {
     const corner = base.match(/^rounded-(tl|tr|br|bl|t|b|l|r)/)?.[1];
     return withVariant(`border-radius-${corner}`);
@@ -475,17 +593,21 @@ export function getTailwindPropertyPrefix(cls: string): string | null {
     return withVariant('border-radius');
   }
 
-  // 6. Box shadow
-  if (/^shadow(-none|-sm|-md|-lg|-xl|-2xl|inner)?$/.test(base)) {
+  // 7. Box shadow & Blur
+  if (/^shadow(-none|-sm|-md|-lg|-xl|-2xl|-inner)?$/.test(base)) {
     return withVariant('box-shadow');
   }
-
-  // 7. Backdrop blur
   if (base.startsWith('backdrop-blur')) {
     return withVariant('backdrop-blur');
   }
+  if (/^blur(-none|-sm|-md|-lg|-xl|-2xl|-3xl|(\[[^\]]+\]))?$/.test(base)) {
+    return withVariant('layer-blur');
+  }
 
-  // 8. Flex direction & wrap
+  // 8. Flex display, direction & wrap
+  if (/^(block|inline-block|inline|flex|inline-flex|grid|inline-grid|hidden)$/.test(base)) {
+    return withVariant('display');
+  }
   if (/^flex-(row|col|row-reverse|col-reverse)$/.test(base)) {
     return withVariant('flex-direction');
   }
@@ -501,9 +623,13 @@ export function getTailwindPropertyPrefix(cls: string): string | null {
     return withVariant('justify-content');
   }
 
-  // 10. Border styling
+  // 10. Border styling & individual sides
   if (/^border-(solid|dashed|dotted|double|none)$/.test(base)) {
     return withVariant('border-style');
+  }
+  if (/^border-([trbl])(-[0-9]+|(\[[0-9]+px\]))?$/.test(base)) {
+    const side = base.match(/^border-([trbl])/)?.[1];
+    return withVariant(`border-width-${side}`);
   }
   if (/^border(-[0-9]+|(\[[0-9]+px\]))?$/.test(base) || base === 'border') {
     return withVariant('border-width');
@@ -512,7 +638,12 @@ export function getTailwindPropertyPrefix(cls: string): string | null {
     return withVariant('border-color');
   }
 
-  // 11. Dimensions & Spacing
+  // 11. Transforms (rotate & translate nudging)
+  if (/^-?rotate-/.test(base)) return withVariant('rotate');
+  if (/^-?translate-x-/.test(base)) return withVariant('translate-x');
+  if (/^-?translate-y-/.test(base)) return withVariant('translate-y');
+
+  // 12. Dimensions & Spacing
   if (/^w-/.test(base)) return withVariant('width');
   if (/^h-/.test(base)) return withVariant('height');
   if (/^gap-/.test(base)) return withVariant('gap');

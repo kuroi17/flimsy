@@ -122,6 +122,38 @@ export function flimsy(options: FlimsyOptions = {}): Plugin {
           req.on('end', async () => {
             try {
               const data = JSON.parse(body);
+
+              // Batch updates for multi-selection (processed sequentially to avoid same-file write races)
+              if (Array.isArray(data.updates)) {
+                const results = [];
+                let allSuccess = true;
+                let latestMtime = 0;
+                for (const item of data.updates) {
+                  const resItem = await updateSourceFile({
+                    filePath: item.file,
+                    line: Number(item.line),
+                    column: Number(item.col || 0),
+                    action: item.action,
+                    actions: item.actions,
+                    force: true,
+                    rootDir: root,
+                  });
+                  results.push(resItem);
+                  if (!resItem.success) allSuccess = false;
+                  if (resItem.mtime && resItem.mtime > latestMtime) latestMtime = resItem.mtime;
+                }
+                res.setHeader('Content-Type', 'application/json');
+                res.end(
+                  JSON.stringify({
+                    success: allSuccess,
+                    results,
+                    mtime: latestMtime || Date.now(),
+                    error: allSuccess ? undefined : results.find((r) => !r.success)?.error,
+                  })
+                );
+                return;
+              }
+
               const result = await updateSourceFile({
                 filePath: data.file,
                 line: Number(data.line),

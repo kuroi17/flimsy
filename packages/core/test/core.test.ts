@@ -404,5 +404,119 @@ export function Button({ isPrimary }: { isPrimary: boolean }) {
     const grad = resolveDesignHeuristic('p-2', 'Vibrant gradient background');
     expect(grad.suggestedClasses).toContain('bg-gradient-to-r');
   });
+
+  it('reconciles advanced typography, transforms, per-side borders, and effects cleanly', () => {
+    const existing = 'leading-normal tracking-tight uppercase rotate-6 translate-x-[4px] border-t-2 border-solid border-slate-500 shadow-md blur-sm backdrop-blur-md opacity-100';
+    const updated = reconcileClasses(
+      existing,
+      'leading-loose tracking-widest capitalize -rotate-12 translate-x-[14px] translate-y-[-8px] border-t-4 border-b-2 shadow-inner blur-lg opacity-50'
+    );
+    expect(updated).toContain('leading-loose');
+    expect(updated).not.toContain('leading-normal');
+    expect(updated).toContain('tracking-widest');
+    expect(updated).not.toContain('tracking-tight');
+    expect(updated).toContain('capitalize');
+    expect(updated).not.toContain('uppercase');
+    expect(updated).toContain('-rotate-12');
+    expect(updated).not.toContain('rotate-6');
+    expect(updated).toContain('translate-x-[14px]');
+    expect(updated).not.toContain('translate-x-[4px]');
+    expect(updated).toContain('translate-y-[-8px]');
+    expect(updated).toContain('border-t-4');
+    expect(updated).not.toContain('border-t-2');
+    expect(updated).toContain('border-b-2');
+    expect(updated).toContain('border-solid');
+    expect(updated).toContain('border-slate-500');
+    expect(updated).toContain('shadow-inner');
+    expect(updated).not.toContain('shadow-md');
+    expect(updated).toContain('blur-lg');
+    expect(updated).not.toContain('blur-sm');
+    expect(updated).toContain('backdrop-blur-md');
+    expect(updated).toContain('opacity-50');
+    expect(updated).not.toContain('opacity-100');
+  });
+
+  it('updates cn() / clsx() even when StringLiteral is not the first argument or missing', async () => {
+    const sampleFilePath = path.join(tempDir, 'DynamicCn.tsx');
+    const initialContent = `import { cn } from './utils';
+
+export function Box({ className, active }: { className?: string; active: boolean }) {
+  return (
+    <div className={cn(className, 'p-4 bg-white', active && 'ring-2')}>
+      <span className={cn(active && 'text-blue-500')}>Label</span>
+    </div>
+  );
+}
+`;
+    await fs.writeFile(sampleFilePath, initialContent, 'utf-8');
+
+    const res1 = await updateSourceFile({
+      filePath: sampleFilePath,
+      line: 5,
+      column: 4,
+      action: { type: 'update-class', newClasses: 'p-8 bg-slate-900', removeClasses: ['p-4', 'bg-white'], mode: 'reconcile' },
+    });
+    expect(res1.success).toBe(true);
+    expect(res1.newCode).toContain('p-8');
+    expect(res1.newCode).toContain('bg-slate-900');
+    expect(res1.newCode).toContain("active && 'ring-2'");
+    expect(res1.newCode).not.toContain('bg-white');
+
+    const res2 = await updateSourceFile({
+      filePath: sampleFilePath,
+      line: 6,
+      column: 6,
+      action: { type: 'update-class', newClasses: 'font-bold uppercase', mode: 'reconcile' },
+    });
+    expect(res2.success).toBe(true);
+    expect(res2.newCode).toContain('"font-bold uppercase"');
+    expect(res2.newCode).toContain("active && 'text-blue-500'");
+  });
+
+  it('reparents JSX elements inside containers and guards against parent-into-descendant cycles', async () => {
+    const sampleFilePath = path.join(tempDir, 'Tree.tsx');
+    const initialContent = `export function Tree() {
+  return (
+    <section>
+      <div className="box-a"><span>Child</span></div>
+      <p className="loose">Move Me</p>
+    </section>
+  );
+}
+`;
+    await fs.writeFile(sampleFilePath, initialContent, 'utf-8');
+
+    // Nest <p className="loose"> inside <div className="box-a">
+    const nestRes = await updateSourceFile({
+      filePath: sampleFilePath,
+      line: 5,
+      column: 6,
+      action: {
+        type: 'reparent-element',
+        targetLine: 4,
+        targetColumn: 6,
+        position: 'inside',
+      },
+    });
+    expect(nestRes.success).toBe(true);
+    expect(nestRes.newCode).toMatch(/<div className="box-a">[\s\S]*<p className="loose">Move Me<\/p>[\s\S]*<\/div>/);
+
+    // Attempt cycle: move <section> (line 3) inside its own descendant <div className="box-a"> (line 4)
+    const beforeCycle = await fs.readFile(sampleFilePath, 'utf-8');
+    const cycleRes = await updateSourceFile({
+      filePath: sampleFilePath,
+      line: 3,
+      column: 4,
+      action: {
+        type: 'reparent-element',
+        targetLine: 4,
+        targetColumn: 6,
+        position: 'inside',
+      },
+    });
+    expect(cycleRes.success).toBe(true);
+    const afterCycle = await fs.readFile(sampleFilePath, 'utf-8');
+    expect(afterCycle).toBe(beforeCycle);
+  });
 });
 
