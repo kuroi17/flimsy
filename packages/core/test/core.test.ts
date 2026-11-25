@@ -5,6 +5,7 @@ import os from 'node:os';
 import {
   injectSourceLocations,
   updateSourceFile,
+  extractJSXSnippets,
   reconcileClasses,
   generateDiffPreview,
   extractAIElementContext,
@@ -517,6 +518,90 @@ export function Box({ className, active }: { className?: string; active: boolean
     expect(cycleRes.success).toBe(true);
     const afterCycle = await fs.readFile(sampleFilePath, 'utf-8');
     expect(afterCycle).toBe(beforeCycle);
+  });
+
+  it('reconciles position and inset classes cleanly without collision', () => {
+    const existing = 'relative left-4 top-2 right-0 bg-white';
+    const updated = reconcileClasses(existing, 'absolute left-[64px] top-[-12px]');
+    expect(updated).toContain('absolute');
+    expect(updated).not.toContain('relative');
+    expect(updated).toContain('left-[64px]');
+    expect(updated).not.toContain('left-4');
+    expect(updated).toContain('top-[-12px]');
+    expect(updated).not.toContain('top-2');
+    expect(updated).toContain('right-0');
+    expect(updated).toContain('bg-white');
+  });
+
+  it('extracts multi-element JSX snippets deduplicating nested descendants and pastes them cleanly', async () => {
+    const sampleFilePath = path.join(tempDir, 'GroupPaste.tsx');
+    const initialContent = `export function GroupPaste() {
+  return (
+    <main>
+      <div className="group-a">
+        <span className="inner">Inside A</span>
+      </div>
+      <p className="sibling">Sibling B</p>
+      <section className="slot" />
+    </main>
+  );
+}
+`;
+    await fs.writeFile(sampleFilePath, initialContent, 'utf-8');
+
+    // Select group-a (line 4), its descendant inner span (line 5), and sibling p (line 7)
+    const copyRes = await extractJSXSnippets(
+      [
+        { filePath: sampleFilePath, line: 4, column: 6 },
+        { filePath: sampleFilePath, line: 5, column: 8 },
+        { filePath: sampleFilePath, line: 7, column: 6 },
+      ],
+      tempDir
+    );
+
+    expect(copyRes.success).toBe(true);
+    // Descendant <span className="inner"> must be deduplicated because <div className="group-a"> is selected
+    expect(copyRes.snippets.length).toBe(2);
+    expect(copyRes.snippets[0]).toContain('group-a');
+    expect(copyRes.snippets[0]).toContain('Inside A');
+    expect(copyRes.snippets[1]).toContain('Sibling B');
+
+    // Paste after <p className="sibling"> (line 7)
+    const pasteAfterRes = await updateSourceFile({
+      filePath: sampleFilePath,
+      line: 7,
+      column: 6,
+      action: {
+        type: 'paste-elements',
+        snippets: copyRes.snippets,
+        position: 'after',
+      },
+      rootDir: tempDir,
+    });
+
+    expect(pasteAfterRes.success).toBe(true);
+    expect(pasteAfterRes.newCode?.match(/Inside A/g)?.length).toBe(2);
+    expect(pasteAfterRes.newCode?.match(/Sibling B/g)?.length).toBe(2);
+
+    // Paste inside self-closing <section className="slot" /> (find its current line)
+    const lines = (pasteAfterRes.newCode || '').split('\n');
+    const slotLine = lines.findIndex((l) => l.includes('className="slot"')) + 1;
+    expect(slotLine).toBeGreaterThan(0);
+
+    const pasteInsideRes = await updateSourceFile({
+      filePath: sampleFilePath,
+      line: slotLine,
+      column: 6,
+      action: {
+        type: 'paste-elements',
+        snippets: ['<span className="pasted-child">Nested Copy</span>'],
+        position: 'inside',
+      },
+      rootDir: tempDir,
+    });
+
+    expect(pasteInsideRes.success).toBe(true);
+    expect(pasteInsideRes.newCode).toMatch(/<section className="slot">[\s\S]*Nested Copy[\s\S]*<\/section>/);
   });
 });
 

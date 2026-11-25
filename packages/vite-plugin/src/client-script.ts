@@ -11,6 +11,17 @@ export const clientScript = `
   let isSnapEnabled = true;
   let isAltPressed = false;
 
+  // Viewport Camera (Zoom & Pan) + Hand Tool + Clipboard State
+  let canvasZoom = 1;
+  let panX = 0;
+  let panY = 0;
+  let isHandTool = false;
+  let isSpacePressed = false;
+  let isPanning = false;
+  let isMovingElements = false;
+  let copiedSnippets = [];
+  let copiedSourceKeys = new Set();
+
   let hoveredTarget = null;
   let selectedTarget = null;
   let selectedTargets = [];
@@ -46,6 +57,8 @@ export const clientScript = `
     brand: '<svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5 14 9.5 20.5 14.5 11.5 19Z" fill="#09090b"/><path d="M3.5 9.2 13.8 5.2c1.2 4 3.4 5.8 6.4 6.5l-9.2 5.4c-3.2-.5-5.6-3.1-7.5-7.9Z" fill="#faf7ef" stroke="#09090b" stroke-width="1.35" stroke-linejoin="round"/><path d="M13.8 5.2c.4 3.5 2.1 5.6 5.4 6.5" stroke="#09090b" stroke-width="1.2" stroke-linecap="round"/></svg>',
     // Custom Inspect Pointer (faceted arrow with notched inner tail)
     cursor: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5 10.6 19.5l2.4-5.6 5.8-2.2L5 4.5Z"/><path d="m13 13.9 4.5 4.5"/></svg>',
+    // Custom Hand Pan Tool (clean monochrome open palm)
+    hand: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6.5a1.5 1.5 0 0 0-3 0V11"/><path d="M15 9.5V5a1.5 1.5 0 0 0-3 0v6"/><path d="M12 10.5V6a1.5 1.5 0 0 0-3 0v8"/><path d="M9 12.5 7.4 10.9a1.5 1.5 0 0 0-2.1 2.1l3.6 5.2A4 4 0 0 0 12.2 20h2.3a4.5 4.5 0 0 0 4.5-4.5v-4.5a1.5 1.5 0 0 0-3 0"/></svg>',
     // Custom Text Glyph (editorial T with crisp terminal serifs)
     text: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6.5V5h14v1.5"/><path d="M12 5v14"/><path d="M9.2 19h5.6"/></svg>',
     // Custom Flimsy Layers (two peeling stacked sheets matching brand mark)
@@ -291,6 +304,17 @@ export const clientScript = `
     if (m) {
       const v = m[1].endsWith('%') ? (parseFloat(m[1]) / 100) : m[1];
       return 'opacity: ' + v + ';';
+    }
+
+    // Position & Inset offsets (for Freeform Absolute Drag & Layout Positioning)
+    if (/^(static|relative|absolute|fixed|sticky)$/.test(cls)) return 'position: ' + cls + ';';
+    m = cls.match(/^(-)?(left|right|top|bottom)-(.+)$/);
+    if (m) {
+      const len = resolveTwLength(m[3]);
+      if (len) {
+        const val = m[1] ? ('-' + len.replace(/^-/, '')) : len;
+        return m[2] + ': ' + val + ';';
+      }
     }
 
     m = cls.match(/^(-)?rotate-(?:\\[([^\\]]+)\\]|(\\d+))$/);
@@ -653,6 +677,38 @@ export const clientScript = `
       pointer-events: none;
       z-index: 1060;
       display: none;
+    }
+    .canvas-drop-guide {
+      position: fixed;
+      pointer-events: none;
+      display: none;
+      z-index: 1070;
+      border-radius: 3px;
+    }
+    .canvas-drop-guide.mode-inside {
+      border: 2px dashed var(--figma-blue);
+      background: rgba(14, 165, 233, 0.12);
+    }
+    .canvas-drop-guide.mode-line {
+      background: var(--figma-blue);
+      box-shadow: 0 0 8px rgba(14, 165, 233, 0.55);
+    }
+    .zoom-pill {
+      font-size: 10px;
+      font-weight: 600;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      padding: 4px 7px;
+      border-radius: 9999px;
+      border: none;
+      background: transparent;
+      color: var(--ink-secondary);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.12s, color 0.12s;
+    }
+    .zoom-pill:hover {
+      background: var(--well-bg);
+      color: var(--ink-primary);
     }
     .measure-line {
       position: fixed;
@@ -1662,12 +1718,18 @@ export const clientScript = `
   measureLayer.id = 'flimsy-measure-layer';
   shadow.appendChild(measureLayer);
 
+  const canvasDropGuide = document.createElement('div');
+  canvasDropGuide.className = 'canvas-drop-guide';
+  canvasDropGuide.id = 'flimsy-canvas-drop-guide';
+  shadow.appendChild(canvasDropGuide);
+
   // --- Bottom-Center Floating Glass Pill Dock ---
   const dock = document.createElement('div');
   dock.className = 'bottom-dock';
   dock.innerHTML = \`
-    <button class="dock-tool dock-btn" data-tip="Inspect (Alt+X)" aria-label="Toggle Inspect">\${ICONS.cursor}</button>
+    <button class="dock-tool dock-btn" data-tip="Select (V / Alt+X)" aria-label="Toggle Inspect">\${ICONS.cursor}</button>
     <div class="dock-extra" id="flimsy-dock-extra" style="display:none;">
+      <button class="dock-tool" id="flimsy-hand-tool" data-tip="Hand Pan (H / Space)" aria-label="Pan Canvas">\${ICONS.hand}</button>
       <button class="dock-tool" id="flimsy-text-tool" data-tip="Edit Text" aria-label="Edit Text">\${ICONS.text}</button>
       <button class="dock-tool subtle-active" id="flimsy-layers-toggle" data-tip="Layers" aria-label="Toggle Layers">\${ICONS.layers}</button>
       <button class="dock-tool subtle-active" id="flimsy-snap-toggle" data-tip="Snap to Scale (Ctrl bypass)" aria-label="Toggle Tailwind Snap">\${ICONS.snap}</button>
@@ -1675,6 +1737,8 @@ export const clientScript = `
       <button class="dock-tool" id="flimsy-undo-btn" data-tip="Undo (Ctrl+Z)" aria-label="Undo" disabled>\${ICONS.undo}</button>
       <button class="dock-tool" id="flimsy-redo-btn" data-tip="Redo (Ctrl+Y)" aria-label="Redo" disabled>\${ICONS.redo}</button>
       <button class="dock-tool" id="flimsy-dock-ai-btn" data-tip="AI Assist" aria-label="AI Assist">\${ICONS.ai}</button>
+      <div class="dock-divider"></div>
+      <button class="zoom-pill" id="flimsy-zoom-pill" title="Zoom (Ctrl+Scroll, Ctrl+0 to reset)">100%</button>
     </div>
     <div class="dock-divider"></div>
     <div class="sync-status-badge" id="flimsy-dock-sync-status" title="Press Shift+S to sync changes to code">
@@ -1687,12 +1751,14 @@ export const clientScript = `
 
   const dockBtn = dock.querySelector('.dock-btn');
   const dockExtra = dock.querySelector('#flimsy-dock-extra');
+  const handToolBtn = dock.querySelector('#flimsy-hand-tool');
   const textToolBtn = dock.querySelector('#flimsy-text-tool');
   const layersToggleBtn = dock.querySelector('#flimsy-layers-toggle');
   const snapToggleBtn = dock.querySelector('#flimsy-snap-toggle');
   const undoBtn = dock.querySelector('#flimsy-undo-btn');
   const redoBtn = dock.querySelector('#flimsy-redo-btn');
   const dockAiBtn = dock.querySelector('#flimsy-dock-ai-btn');
+  const zoomPillBtn = dock.querySelector('#flimsy-zoom-pill');
   const dockSyncBadge = dock.querySelector('#flimsy-dock-sync-status');
 
   // --- Highlight Box with 8 Grab Handles + Rotation Knob ---
@@ -1778,6 +1844,15 @@ export const clientScript = `
       <div class="grid-2">
         <div class="field-box"><span class="field-k">W</span><input type="text" id="flimsy-width-input" class="field-input" placeholder="auto" title="Width (px, full, fit, auto)"></div>
         <div class="field-box"><span class="field-k">H</span><input type="text" id="flimsy-height-input" class="field-input" placeholder="auto" title="Height (px, full, fit, auto)"></div>
+      </div>
+
+      <div style="display:flex; gap:5px; align-items:center;">
+        <div class="field-box" style="flex:1;"><span class="field-k">X</span><input type="text" id="flimsy-pos-x-input" class="field-input" placeholder="0px" title="Horizontal offset (drag on canvas)"></div>
+        <div class="field-box" style="flex:1;"><span class="field-k">Y</span><input type="text" id="flimsy-pos-y-input" class="field-input" placeholder="0px" title="Vertical offset (drag on canvas)"></div>
+        <div class="segmented" id="seg-position" style="width:74px; flex-shrink:0;">
+          <button class="seg-btn" data-class="relative" title="Relative flow offset">Rel</button>
+          <button class="seg-btn" data-class="absolute" title="Absolute freeform coordinates">Abs</button>
+        </div>
       </div>
 
       <div style="display:flex; gap:8px; align-items:stretch;">
@@ -2081,6 +2156,8 @@ export const clientScript = `
 
   const widthInput = panel.querySelector('#flimsy-width-input');
   const heightInput = panel.querySelector('#flimsy-height-input');
+  const posXInput = panel.querySelector('#flimsy-pos-x-input');
+  const posYInput = panel.querySelector('#flimsy-pos-y-input');
   const gapInput = panel.querySelector('#flimsy-gap-input');
   const padInput = panel.querySelector('#flimsy-pad-input');
   const radiusInput = panel.querySelector('#flimsy-radius-input');
@@ -2305,6 +2382,11 @@ export const clientScript = `
     if (/^border(-[0-9]+|(\\[[0-9]+px\\]))?$/.test(base) || base === 'border') return 'border-width';
     if (base.startsWith('border-')) return 'border-color';
     if (base.startsWith('opacity-')) return 'opacity';
+    if (/^(static|fixed|absolute|relative|sticky)$/.test(base)) return 'position';
+    if (/^-?left-/.test(base)) return 'inset-left';
+    if (/^-?right-/.test(base)) return 'inset-right';
+    if (/^-?top-/.test(base)) return 'inset-top';
+    if (/^-?bottom-/.test(base)) return 'inset-bottom';
     if (/^-?rotate-/.test(base)) return 'rotate';
     if (/^-?translate-x-/.test(base)) return 'translate-x';
     if (/^-?translate-y-/.test(base)) return 'translate-y';
@@ -2460,6 +2542,56 @@ export const clientScript = `
     return 0;
   }
 
+  function parseInsetPx(classesStr, side) {
+    const tokens = (classesStr || '').split(/\\s+/);
+    const re = new RegExp('^(-)?' + side + '-(?:\\\\[(-?\\\\d+(?:\\\\.\\\\d+)?)px\\\\]|(\\\\d+))$');
+    for (let i = tokens.length - 1; i >= 0; i--) {
+      const m = tokens[i].match(re);
+      if (m) {
+        if (m[2] !== undefined) {
+          const raw = parseFloat(m[2]);
+          return m[1] ? -Math.abs(raw) : raw;
+        }
+        const scalePx = parseFloat(m[3]) * 4;
+        return m[1] ? -scalePx : scalePx;
+      }
+    }
+    return 0;
+  }
+
+  function isAbsolutePositioned(el) {
+    return /\\b(absolute|fixed)\\b/.test(el?.className || '');
+  }
+
+  function getElementPosXY(el) {
+    const cls = el.className || '';
+    if (isAbsolutePositioned(el)) {
+      const cs = window.getComputedStyle(el);
+      const hasLeft = /\\b-?left-/.test(cls);
+      const hasTop = /\\b-?top-/.test(cls);
+      return {
+        x: hasLeft ? parseInsetPx(cls, 'left') : Math.round(parseFloat(cs.left) || el.offsetLeft || 0),
+        y: hasTop ? parseInsetPx(cls, 'top') : Math.round(parseFloat(cs.top) || el.offsetTop || 0),
+      };
+    }
+    return {
+      x: parseTranslatePx(cls, 'x'),
+      y: parseTranslatePx(cls, 'y'),
+    };
+  }
+
+  function setElementPosAxis(el, axis, pxVal) {
+    const rounded = Math.round(pxVal);
+    if (isAbsolutePositioned(el)) {
+      const side = axis === 'x' ? 'left' : 'top';
+      applyClassToElement(el, side + '-[' + rounded + 'px]');
+    } else if (rounded === 0) {
+      applyClassToElement(el, '', 'translate-' + axis);
+    } else {
+      applyClassToElement(el, 'translate-' + axis + '-[' + rounded + 'px]');
+    }
+  }
+
   function updateActiveSegmentedUI(classesStr) {
     const tokens = (classesStr || '').split(/\\s+/).filter(Boolean);
     panel.querySelectorAll('.seg-btn').forEach((btn) => {
@@ -2476,8 +2608,11 @@ export const clientScript = `
     if (selectedTarget) {
       const rect = selectedTarget.getBoundingClientRect();
       const cs = window.getComputedStyle(selectedTarget);
-      widthInput.value = Math.round(rect.width) + 'px';
-      heightInput.value = Math.round(rect.height) + 'px';
+      widthInput.value = Math.round(rect.width / canvasZoom) + 'px';
+      heightInput.value = Math.round(rect.height / canvasZoom) + 'px';
+      const pos = getElementPosXY(selectedTarget);
+      posXInput.value = Math.round(pos.x) + 'px';
+      posYInput.value = Math.round(pos.y) + 'px';
       sizeInput.value = Math.round(parseFloat(cs.fontSize) || 16) + 'px';
 
       const radPx = Math.round(parseFloat(cs.borderTopLeftRadius) || 0);
@@ -2542,11 +2677,135 @@ export const clientScript = `
     updateSyncBadge();
   }
 
+  // --- Viewport Camera (Figma Zoom & Pan on document.body, Shadow DOM stays fixed at 100%) ---
+  let prevBodyTransform = '';
+  let prevBodyTransformOrigin = '';
+  let cameraApplied = false;
+
+  function applyViewportCamera() {
+    if (!cameraApplied) {
+      prevBodyTransform = document.body.style.transform || '';
+      prevBodyTransformOrigin = document.body.style.transformOrigin || '';
+      cameraApplied = true;
+    }
+    if (canvasZoom === 1 && panX === 0 && panY === 0) {
+      document.body.style.transform = prevBodyTransform;
+      document.body.style.transformOrigin = prevBodyTransformOrigin;
+    } else {
+      document.body.style.transformOrigin = '0 0';
+      document.body.style.transform = 'translate(' + Math.round(panX) + 'px, ' + Math.round(panY) + 'px) scale(' + canvasZoom + ')';
+    }
+    zoomPillBtn.textContent = Math.round(canvasZoom * 100) + '%';
+    if (selectedTarget) updateAllSelectionBoxes();
+    else if (hoveredTarget) updateHighlightBox(hoveredTarget, false);
+    if (isAltPressed && selectedTarget && hoveredTarget && hoveredTarget !== selectedTarget) {
+      renderMeasureGuides(selectedTarget, hoveredTarget);
+    }
+  }
+
+  function resetViewportCamera() {
+    canvasZoom = 1;
+    panX = 0;
+    panY = 0;
+    applyViewportCamera();
+  }
+
+  function zoomAtPoint(clientX, clientY, factor) {
+    const prevZoom = canvasZoom;
+    const nextZoom = Math.max(0.25, Math.min(3, Math.round(prevZoom * factor * 100) / 100));
+    if (nextZoom === prevZoom) return;
+    panX = clientX - ((clientX - panX) / prevZoom) * nextZoom;
+    panY = clientY - ((clientY - panY) / prevZoom) * nextZoom;
+    canvasZoom = nextZoom;
+    applyViewportCamera();
+  }
+
+  function setHandTool(active) {
+    isHandTool = active;
+    handToolBtn.classList.toggle('active', isHandTool);
+    dockBtn.classList.toggle('active', isInspectActive && !isHandTool);
+    document.documentElement.style.cursor = (isInspectActive && (isHandTool || isSpacePressed)) ? 'grab' : '';
+  }
+
+  // --- Copy & Paste Group / Elements Directly into TSX AST (Ctrl+C / Ctrl+V) ---
+  async function copySelectedElements() {
+    if (!isInspectActive || selectedTargets.length === 0) return;
+    const targets = selectedTargets.map((el) => ({
+      file: el.getAttribute('data-flimsy-file'),
+      line: parseInt(el.getAttribute('data-flimsy-line'), 10),
+      col: parseInt(el.getAttribute('data-flimsy-col'), 10),
+    })).filter((t) => t.file && !Number.isNaN(t.line));
+
+    if (targets.length === 0) return;
+
+    try {
+      const res = await fetch('/__flimsy/api/copy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targets }),
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.snippets) && data.snippets.length > 0) {
+        copiedSnippets = data.snippets;
+        copiedSourceKeys = new Set(selectedTargets.map((el) => getLayerNodeKey(el)));
+        syncStatus.style.display = 'block';
+        syncStatus.style.color = '#09090b';
+        syncStatus.textContent = 'Copied ' + copiedSnippets.length + ' element' + (copiedSnippets.length > 1 ? 's' : '') + ' (Ctrl+V to paste)';
+        setTimeout(() => { syncStatus.style.display = 'none'; }, 1600);
+      }
+    } catch {}
+  }
+
+  async function pasteCopiedElements() {
+    if (!isInspectActive || copiedSnippets.length === 0 || !selectedTarget) return;
+    const targetEl = selectedTarget;
+    const file = targetEl.getAttribute('data-flimsy-file');
+    const line = parseInt(targetEl.getAttribute('data-flimsy-line'), 10);
+    const col = parseInt(targetEl.getAttribute('data-flimsy-col'), 10);
+    if (!file || Number.isNaN(line)) return;
+
+    const targetKey = getLayerNodeKey(targetEl);
+    const canPasteInside = !copiedSourceKeys.has(targetKey) && !VOID_TAGS.has(targetEl.tagName.toLowerCase()) && !isTextElement(targetEl);
+    const position = canPasteInside ? 'inside' : 'after';
+
+    try {
+      syncStatus.style.display = 'block';
+      syncStatus.style.color = '#52525b';
+      syncStatus.textContent = 'Pasting ' + copiedSnippets.length + ' element' + (copiedSnippets.length > 1 ? 's' : '') + '...';
+
+      const res = await fetch('/__flimsy/api/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          file,
+          line,
+          col,
+          action: { type: 'paste-elements', snippets: copiedSnippets, position },
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        syncStatus.style.color = '#15803d';
+        syncStatus.textContent = 'Pasted ' + copiedSnippets.length + ' element' + (copiedSnippets.length > 1 ? 's' : '') + ' to ' + file.split('/').pop();
+        setTimeout(() => {
+          syncStatus.style.display = 'none';
+          renderFullLayersTree();
+        }, 1200);
+      } else {
+        syncStatus.style.color = '#991b1b';
+        syncStatus.textContent = data.error || 'Paste failed.';
+      }
+    } catch {}
+  }
+
   function toggleInspect(force) {
     isInspectActive = typeof force === 'boolean' ? force : !isInspectActive;
-    dockBtn.classList.toggle('active', isInspectActive);
-    dockExtra.style.display = isInspectActive ? 'flex' : 'none';
     if (!isInspectActive) {
+      isHandTool = false;
+      isSpacePressed = false;
+      handToolBtn.classList.remove('active');
+      document.documentElement.style.cursor = '';
+      resetViewportCamera();
       hoverOutline.style.display = 'none';
       hoveredTarget = null;
       clearSelection();
@@ -2555,6 +2814,8 @@ export const clientScript = `
       renderFullLayersTree();
       syncLayersVisibility();
     }
+    dockBtn.classList.toggle('active', isInspectActive && !isHandTool);
+    dockExtra.style.display = isInspectActive ? 'flex' : 'none';
   }
 
   function toggleAIDrawer(force) {
@@ -2566,7 +2827,15 @@ export const clientScript = `
     if (nextOpen) aiInput.focus();
   }
 
-  dockBtn.addEventListener('click', () => toggleInspect());
+  dockBtn.addEventListener('click', () => {
+    if (isInspectActive && isHandTool) setHandTool(false);
+    else toggleInspect();
+  });
+  handToolBtn.addEventListener('click', () => {
+    if (!isInspectActive) toggleInspect(true);
+    setHandTool(!isHandTool);
+  });
+  zoomPillBtn.addEventListener('click', () => resetViewportCamera());
   undoBtn.addEventListener('click', () => undo());
   redoBtn.addEventListener('click', () => redo());
   dockSyncBadge.addEventListener('click', () => syncToCode());
@@ -2738,6 +3007,59 @@ export const clientScript = `
 
     if (typing) return;
 
+    // Spacebar temporary Hand Pan tool (Figma-style)
+    if (e.code === 'Space' && isInspectActive) {
+      e.preventDefault();
+      if (!isSpacePressed) {
+        isSpacePressed = true;
+        document.documentElement.style.cursor = 'grab';
+      }
+      return;
+    }
+
+    // Tool switchers: H (Hand pan), V (Select cursor)
+    if (isInspectActive && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (e.key === 'h' || e.key === 'H') {
+        e.preventDefault();
+        setHandTool(true);
+        return;
+      }
+      if (e.key === 'v' || e.key === 'V') {
+        e.preventDefault();
+        setHandTool(false);
+        return;
+      }
+    }
+
+    // Viewport Zoom shortcuts: Ctrl/Cmd + (+ / - / 0)
+    if (isInspectActive && (e.ctrlKey || e.metaKey)) {
+      if (e.key === '=' || e.key === '+') {
+        e.preventDefault();
+        zoomAtPoint(window.innerWidth / 2, window.innerHeight / 2, 1.2);
+        return;
+      }
+      if (e.key === '-') {
+        e.preventDefault();
+        zoomAtPoint(window.innerWidth / 2, window.innerHeight / 2, 1 / 1.2);
+        return;
+      }
+      if (e.key === '0') {
+        e.preventDefault();
+        resetViewportCamera();
+        return;
+      }
+      if ((e.key === 'c' || e.key === 'C') && selectedTargets.length > 0) {
+        e.preventDefault();
+        await copySelectedElements();
+        return;
+      }
+      if ((e.key === 'v' || e.key === 'V') && copiedSnippets.length > 0 && selectedTarget) {
+        e.preventDefault();
+        await pasteCopiedElements();
+        return;
+      }
+    }
+
     if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) {
       if (isInspectActive && selectedTarget) {
         e.preventDefault();
@@ -2766,22 +3088,16 @@ export const clientScript = `
         const delta = (e.key === 'ArrowLeft' || e.key === 'ArrowUp') ? -step : step;
 
         for (const el of selectedTargets) {
-          const curVal = parseTranslatePx(el.className || '', axis);
-          const nextVal = curVal + delta;
-          if (nextVal === 0) {
-            applyClassToElement(el, '', 'translate-' + axis);
-          } else {
-            applyClassToElement(el, 'translate-' + axis + '-[' + nextVal + 'px]');
-          }
+          const curPos = getElementPosXY(el);
+          setElementPosAxis(el, axis, curPos[axis] + delta);
         }
         const primarySt = getOrInitTargetState(selectedTarget);
         pendingClasses = primarySt.pendingClasses;
         classesRawInput.value = pendingClasses;
         updateActiveSegmentedUI(pendingClasses);
         updateAllSelectionBoxes();
-        const tx = parseTranslatePx(pendingClasses, 'x');
-        const ty = parseTranslatePx(pendingClasses, 'y');
-        dimPillSpan.textContent = 'offset ' + tx + 'px, ' + ty + 'px';
+        const p = getElementPosXY(selectedTarget);
+        dimPillSpan.textContent = 'x: ' + Math.round(p.x) + 'px, y: ' + Math.round(p.y) + 'px';
         pushHistory();
       }
     }
@@ -2792,12 +3108,37 @@ export const clientScript = `
       isAltPressed = false;
       clearMeasureGuides();
     }
+    if (e.code === 'Space') {
+      isSpacePressed = false;
+      if (!isHandTool) document.documentElement.style.cursor = '';
+    }
   });
 
   window.addEventListener('blur', () => {
     isAltPressed = false;
+    isSpacePressed = false;
+    if (!isHandTool) document.documentElement.style.cursor = '';
     clearMeasureGuides();
   });
+
+  // --- Wheel Zoom-to-Cursor (Ctrl+Wheel / Trackpad Pinch) & Horizontal/Vertical Pan ---
+  window.addEventListener('wheel', (e) => {
+    if (!isInspectActive) return;
+    if (e.composedPath().includes(container)) return;
+
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.12 : (1 / 1.12);
+      zoomAtPoint(e.clientX, e.clientY, factor);
+    } else if (canvasZoom !== 1 || panX !== 0 || panY !== 0 || isHandTool) {
+      e.preventDefault();
+      const dx = e.shiftKey && e.deltaX === 0 ? e.deltaY : e.deltaX;
+      const dy = e.shiftKey && e.deltaX === 0 ? 0 : e.deltaY;
+      panX -= dx;
+      panY -= dy;
+      applyViewportCamera();
+    }
+  }, { passive: false });
 
   closeBtn.addEventListener('click', () => clearSelection());
 
@@ -2901,8 +3242,8 @@ export const clientScript = `
       const rect = selectedTarget.getBoundingClientRect();
       const prevTransition = selectedTarget.style.transition;
       selectedTarget.style.transition = 'none';
-      startW = Math.max(1, rect.width);
-      startH = Math.max(1, rect.height);
+      startW = Math.max(1, rect.width / canvasZoom);
+      startH = Math.max(1, rect.height / canvasZoom);
       const aspectRatio = startW / startH;
       initialDiag = Math.hypot(startW, startH) || 1;
       initialFontSize = parseFloat(window.getComputedStyle(selectedTarget).fontSize) || 16;
@@ -2914,8 +3255,8 @@ export const clientScript = `
       const onPointerMove = (me) => {
         if (!isResizing || !selectedTarget) return;
         lastBypassSnap = me.ctrlKey || me.metaKey;
-        const deltaX = me.clientX - startX;
-        const deltaY = me.clientY - startY;
+        const deltaX = (me.clientX - startX) / canvasZoom;
+        const deltaY = (me.clientY - startY) / canvasZoom;
 
         let newW = startW;
         let newH = startH;
@@ -2978,6 +3319,8 @@ export const clientScript = `
           applyOptimisticClass(snapFont(computedFs));
         } else {
           const finalRect = selectedTarget.getBoundingClientRect();
+          const finalW = finalRect.width / canvasZoom;
+          const finalH = finalRect.height / canvasZoom;
           selectedTarget.style.width = '';
           selectedTarget.style.height = '';
 
@@ -3008,10 +3351,10 @@ export const clientScript = `
           };
 
           if (resizeHandle.includes('r') || resizeHandle.includes('l') || (isCorner && ue && ue.shiftKey)) {
-            applyOptimisticClass(snapWidth(finalRect.width), true);
+            applyOptimisticClass(snapWidth(finalW), true);
           }
           if ((!isText || (isCorner && ue && ue.shiftKey)) && (resizeHandle.includes('t') || resizeHandle.includes('b'))) {
-            applyOptimisticClass(snapHeight(finalRect.height), true);
+            applyOptimisticClass(snapHeight(finalH), true);
           }
           pushHistory();
         }
@@ -3458,7 +3801,12 @@ export const clientScript = `
 
   // --- Smooth Hover Detection + Alt Distance Guides ---
   window.addEventListener('mousemove', (e) => {
-    if (!isInspectActive || isResizing || isRotating || isMarqueeDragging) return;
+    if (!isInspectActive || isResizing || isRotating || isMarqueeDragging || isPanning || isMovingElements) return;
+    if (isHandTool || isSpacePressed) {
+      hoverOutline.style.display = 'none';
+      clearMeasureGuides();
+      return;
+    }
     if (e.composedPath().includes(container)) {
       hoverOutline.style.display = 'none';
       clearMeasureGuides();
@@ -3489,19 +3837,188 @@ export const clientScript = `
     }
   }, true);
 
-  // --- Marquee Drag Multi-Selection ---
+  // --- Unified Canvas PointerDown: Hand Pan, Drag-to-Move (Freeform + Alt-Reparent), & Marquee ---
   let isMarqueeDragging = false;
   let marqueeSuppressClick = false;
   let marqueeStartX = 0;
   let marqueeStartY = 0;
 
   window.addEventListener('pointerdown', (e) => {
-    if (!isInspectActive || e.button !== 0) return;
+    if (!isInspectActive) return;
     if (e.composedPath().includes(container)) return;
     if (isResizing || isRotating) return;
 
+    // 1. Hand Pan Mode (Middle-click OR Space+Drag OR Hand Tool)
+    if (e.button === 1 || (e.button === 0 && (isHandTool || isSpacePressed))) {
+      e.preventDefault();
+      e.stopPropagation();
+      isPanning = true;
+      const panStartX = e.clientX;
+      const panStartY = e.clientY;
+      const initPanX = panX;
+      const initPanY = panY;
+      document.documentElement.style.cursor = 'grabbing';
+
+      const onPanMove = (me) => {
+        if (!isPanning) return;
+        panX = initPanX + (me.clientX - panStartX);
+        panY = initPanY + (me.clientY - panStartY);
+        applyViewportCamera();
+      };
+
+      const onPanUp = () => {
+        isPanning = false;
+        marqueeSuppressClick = true;
+        setTimeout(() => { marqueeSuppressClick = false; }, 50);
+        document.documentElement.style.cursor = (isHandTool || isSpacePressed) ? 'grab' : '';
+        window.removeEventListener('pointermove', onPanMove);
+        window.removeEventListener('pointerup', onPanUp);
+      };
+
+      window.addEventListener('pointermove', onPanMove);
+      window.addEventListener('pointerup', onPanUp);
+      return;
+    }
+
+    if (e.button !== 0) return;
+
     const el = document.elementFromPoint(e.clientX, e.clientY);
     const tagged = findTaggedElement(el);
+
+    // 2. Canvas Drag-to-Move (dragging an already-selected element or group of elements)
+    if (tagged && selectedTargets.includes(tagged) && !e.shiftKey && !tagged.isContentEditable) {
+      const dragStartX = e.clientX;
+      const dragStartY = e.clientY;
+      const startPositions = selectedTargets.map((item) => ({
+        el: item,
+        pos: getElementPosXY(item),
+        prevTransition: item.style.transition,
+      }));
+      let dropTargetEl = null;
+      let dropPos = 'after';
+      let isReparentMode = false;
+
+      const onMoveDrag = (me) => {
+        const rawDx = me.clientX - dragStartX;
+        const rawDy = me.clientY - dragStartY;
+        if (!isMovingElements && Math.hypot(rawDx, rawDy) > 5) {
+          isMovingElements = true;
+          startPositions.forEach((sp) => { sp.el.style.transition = 'none'; });
+          hoverOutline.style.display = 'none';
+          clearMeasureGuides();
+        }
+        if (!isMovingElements) return;
+
+        // Alt + Drag on single selected element = Live Canvas DOM Reparenting
+        isReparentMode = Boolean(me.altKey && selectedTargets.length === 1);
+        if (isReparentMode) {
+          const src = selectedTarget;
+          const prevPE = src.style.pointerEvents;
+          src.style.pointerEvents = 'none';
+          const under = document.elementFromPoint(me.clientX, me.clientY);
+          src.style.pointerEvents = prevPE;
+
+          const candidate = findTaggedElement(under);
+          if (candidate && candidate !== src && !src.contains(candidate)) {
+            dropTargetEl = candidate;
+            const r = candidate.getBoundingClientRect();
+            const relY = (me.clientY - r.top) / (r.height || 1);
+            const canNest = !VOID_TAGS.has(candidate.tagName.toLowerCase()) && !isTextElement(candidate);
+
+            canvasDropGuide.style.display = 'block';
+            if (relY < 0.25) {
+              dropPos = 'before';
+              canvasDropGuide.className = 'canvas-drop-guide mode-line';
+              canvasDropGuide.style.left = r.left + 'px';
+              canvasDropGuide.style.top = (r.top - 2) + 'px';
+              canvasDropGuide.style.width = r.width + 'px';
+              canvasDropGuide.style.height = '3px';
+            } else if (relY > 0.75 || !canNest) {
+              dropPos = 'after';
+              canvasDropGuide.className = 'canvas-drop-guide mode-line';
+              canvasDropGuide.style.left = r.left + 'px';
+              canvasDropGuide.style.top = (r.bottom - 1) + 'px';
+              canvasDropGuide.style.width = r.width + 'px';
+              canvasDropGuide.style.height = '3px';
+            } else {
+              dropPos = 'inside';
+              canvasDropGuide.className = 'canvas-drop-guide mode-inside';
+              canvasDropGuide.style.left = r.left + 'px';
+              canvasDropGuide.style.top = r.top + 'px';
+              canvasDropGuide.style.width = r.width + 'px';
+              canvasDropGuide.style.height = r.height + 'px';
+            }
+            dimPillSpan.textContent = dropPos === 'inside'
+              ? ('Drop inside <' + candidate.tagName.toLowerCase() + '>')
+              : ('Move ' + dropPos + ' <' + candidate.tagName.toLowerCase() + '>');
+          } else {
+            dropTargetEl = null;
+            canvasDropGuide.style.display = 'none';
+          }
+          return;
+        }
+
+        // Standard Freeform Canvas Drag-to-Move (zoom-compensated, Shift constrains axis)
+        canvasDropGuide.style.display = 'none';
+        dropTargetEl = null;
+        let dx = rawDx / canvasZoom;
+        let dy = rawDy / canvasZoom;
+        if (me.shiftKey) {
+          if (Math.abs(dx) >= Math.abs(dy)) dy = 0;
+          else dx = 0;
+        }
+
+        for (const sp of startPositions) {
+          setElementPosAxis(sp.el, 'x', sp.pos.x + dx);
+          setElementPosAxis(sp.el, 'y', sp.pos.y + dy);
+        }
+
+        const primarySt = getOrInitTargetState(selectedTarget);
+        pendingClasses = primarySt.pendingClasses;
+        classesRawInput.value = pendingClasses;
+        updateAllSelectionBoxes();
+        const p = getElementPosXY(selectedTarget);
+        posXInput.value = Math.round(p.x) + 'px';
+        posYInput.value = Math.round(p.y) + 'px';
+        dimPillSpan.textContent = 'x: ' + Math.round(p.x) + 'px, y: ' + Math.round(p.y) + 'px';
+      };
+
+      const onUpDrag = () => {
+        window.removeEventListener('pointermove', onMoveDrag);
+        window.removeEventListener('pointerup', onUpDrag);
+        if (!isMovingElements) return;
+
+        isMovingElements = false;
+        marqueeSuppressClick = true;
+        setTimeout(() => { marqueeSuppressClick = false; }, 50);
+        canvasDropGuide.style.display = 'none';
+        startPositions.forEach((sp) => { sp.el.style.transition = sp.prevTransition; });
+
+        if (isReparentMode && dropTargetEl && selectedTarget) {
+          const srcFile = selectedTarget.getAttribute('data-flimsy-file');
+          const dstFile = dropTargetEl.getAttribute('data-flimsy-file');
+          if (srcFile && dstFile && srcFile === dstFile) {
+            reparentElement(selectedTarget, dropTargetEl, dropPos);
+          } else {
+            syncStatus.style.display = 'block';
+            syncStatus.style.color = '#991b1b';
+            syncStatus.textContent = 'Use Ctrl+C / Ctrl+V to move across different files.';
+            setTimeout(() => { syncStatus.style.display = 'none'; }, 2000);
+          }
+          return;
+        }
+
+        updateActiveSegmentedUI(pendingClasses);
+        updateAllSelectionBoxes();
+        pushHistory();
+      };
+
+      window.addEventListener('pointermove', onMoveDrag);
+      window.addEventListener('pointerup', onUpDrag);
+      return;
+    }
+
+    // 3. Marquee Multi-Selection on Empty Canvas Space (or Shift+Drag)
     if (tagged && !e.shiftKey) return;
 
     marqueeStartX = e.clientX;
@@ -3655,6 +4172,32 @@ export const clientScript = `
   heightInput.addEventListener('change', () => {
     const cls = normalizeLengthToken('h', heightInput.value);
     if (cls) applyOptimisticClass(cls);
+  });
+
+  posXInput.addEventListener('change', () => {
+    if (!selectedTarget) return;
+    const px = parseInt(posXInput.value.trim().replace(/px$/i, ''), 10);
+    if (Number.isNaN(px)) return;
+    selectedTargets.forEach((el) => setElementPosAxis(el, 'x', px));
+    const st = getOrInitTargetState(selectedTarget);
+    pendingClasses = st.pendingClasses;
+    classesRawInput.value = pendingClasses;
+    updateActiveSegmentedUI(pendingClasses);
+    updateAllSelectionBoxes();
+    pushHistory();
+  });
+
+  posYInput.addEventListener('change', () => {
+    if (!selectedTarget) return;
+    const px = parseInt(posYInput.value.trim().replace(/px$/i, ''), 10);
+    if (Number.isNaN(px)) return;
+    selectedTargets.forEach((el) => setElementPosAxis(el, 'y', px));
+    const st = getOrInitTargetState(selectedTarget);
+    pendingClasses = st.pendingClasses;
+    classesRawInput.value = pendingClasses;
+    updateActiveSegmentedUI(pendingClasses);
+    updateAllSelectionBoxes();
+    pushHistory();
   });
 
   gapInput.addEventListener('change', () => {

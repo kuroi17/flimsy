@@ -8,6 +8,75 @@ import type { UpdateAction, UpdateResult, UpdateSourceOptions } from './types.js
 const traverse = (traversePkg as any).default || traversePkg;
 const b = recast.types.builders;
 
+export async function extractJSXSnippets(
+  targets: Array<{ filePath: string; line: number; column: number }>,
+  rootDir?: string
+): Promise<{ success: boolean; snippets: string[]; error?: string }> {
+  const root = rootDir || process.cwd();
+  const snippets: string[] = [];
+  const byFile = new Map<string, Array<{ line: number; column: number }>>();
+
+  for (const t of targets) {
+    const resolved = path.isAbsolute(t.filePath) ? t.filePath : path.resolve(root, t.filePath);
+    const list = byFile.get(resolved) || [];
+    list.push({ line: t.line, column: t.column });
+    byFile.set(resolved, list);
+  }
+
+  try {
+    for (const [resolvedPath, locs] of byFile.entries()) {
+      const code = await fs.readFile(resolvedPath, 'utf-8');
+      const ast = recast.parse(code, {
+        parser: {
+          parse(source: string) {
+            return babelParser.parse(source, {
+              sourceType: 'module',
+              plugins: ['jsx', 'typescript'],
+              tokens: true,
+            });
+          },
+        },
+      });
+
+      const foundPaths: any[] = [];
+      for (const loc of locs) {
+        const p = findJSXPathByLocation(ast, loc.line, loc.column);
+        if (p && !foundPaths.some((fp) => fp.node === p.node)) {
+          foundPaths.push(p);
+        }
+      }
+
+      // Exclude descendants whose ancestor is already included in the copy group
+      const topLevelPaths = foundPaths.filter(
+        (p) => !foundPaths.some((other) => other !== p && isDescendantPath(p, other.node))
+      );
+
+      for (const p of topLevelPaths) {
+        snippets.push(recast.print(p.node).code);
+      }
+    }
+
+    return { success: true, snippets };
+  } catch (err: any) {
+    return { success: false, snippets: [], error: err.message };
+  }
+}
+
+function parseJSXSnippetNode(snippet: string): any {
+  const parsed = recast.parse(snippet.trim(), {
+    parser: {
+      parse(source: string) {
+        return babelParser.parse(source, {
+          sourceType: 'module',
+          plugins: ['jsx', 'typescript'],
+          tokens: true,
+        });
+      },
+    },
+  });
+  return parsed.program.body[0]?.expression || null;
+}
+
 export async function updateSourceFile(
   options: UpdateSourceOptions
 ): Promise<UpdateResult> {
@@ -297,6 +366,44 @@ function applyAction(
       if (destIdx !== -1) {
         const insertIdx = action.position === 'before' ? destIdx : destIdx + 1;
         destChildren.splice(insertIdx, 0, movingNode);
+      }
+    }
+    return;
+  }
+
+  if (action.type === 'paste-elements') {
+    if (!Array.isArray(action.snippets) || action.snippets.length === 0) return;
+    const clonedNodes: any[] = [];
+    for (const snippet of action.snippets) {
+      try {
+        const node = parseJSXSnippetNode(snippet);
+        if (node) clonedNodes.push(node);
+      } catch {}
+    }
+    if (clonedNodes.length === 0) return;
+
+    if (action.position === 'inside') {
+      if (elementNode.openingElement?.selfClosing) {
+        elementNode.openingElement.selfClosing = false;
+        elementNode.closingElement = b.jsxClosingElement(elementNode.openingElement.name);
+      }
+      if (!Array.isArray(elementNode.children)) {
+        elementNode.children = [];
+      }
+      for (const node of clonedNodes) {
+        elementNode.children.push(b.jsxText('\n'));
+        elementNode.children.push(node);
+      }
+    } else if (targetPathNode?.parent && Array.isArray(targetPathNode.parent.children)) {
+      const children = targetPathNode.parent.children;
+      const idx = children.indexOf(targetPathNode.node);
+      if (idx !== -1) {
+        const toInsert: any[] = [];
+        for (const node of clonedNodes) {
+          toInsert.push(b.jsxText('\n'));
+          toInsert.push(node);
+        }
+        children.splice(idx + 1, 0, ...toInsert);
       }
     }
     return;
@@ -638,7 +745,12 @@ export function getTailwindPropertyPrefix(cls: string): string | null {
     return withVariant('border-color');
   }
 
-  // 11. Transforms (rotate & translate nudging)
+  // 11. Positioning & Transforms (absolute/relative, top/left/right/bottom, rotate & translate)
+  if (/^(static|fixed|absolute|relative|sticky)$/.test(base)) return withVariant('position');
+  if (/^-?left-/.test(base)) return withVariant('inset-left');
+  if (/^-?right-/.test(base)) return withVariant('inset-right');
+  if (/^-?top-/.test(base)) return withVariant('inset-top');
+  if (/^-?bottom-/.test(base)) return withVariant('inset-bottom');
   if (/^-?rotate-/.test(base)) return withVariant('rotate');
   if (/^-?translate-x-/.test(base)) return withVariant('translate-x');
   if (/^-?translate-y-/.test(base)) return withVariant('translate-y');

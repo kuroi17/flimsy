@@ -70,6 +70,12 @@ describe('Vite Plugin Round-trip Integration', () => {
     expect(script).toContain('seg-tracking');
     expect(script).toContain('seg-text-transform');
     expect(script).toContain('reparent-element');
+    expect(script).toContain('flimsy-hand-tool');
+    expect(script).toContain('flimsy-zoom-pill');
+    expect(script).toContain('flimsy-pos-x-input');
+    expect(script).toContain('flimsy-pos-y-input');
+    expect(script).toContain('/__flimsy/api/copy');
+    expect(script).toContain('paste-elements');
   });
 
   it('inspects file metadata at /__flimsy/api/inspect', async () => {
@@ -175,6 +181,57 @@ describe('Vite Plugin Round-trip Integration', () => {
     expect(disk).toContain('tracking-widest');
     expect(disk).toContain('leading-loose');
     expect(disk).toContain('opacity-75');
+  });
+
+  it('copies a multi-element group via /__flimsy/api/copy and pastes it via paste-elements', async () => {
+    await fs.writeFile(heroFilePath, originalHeroContent, 'utf-8');
+    const resModule = await fetch(`${serverUrl}/src/components/Hero.tsx`);
+    const code = await resModule.text();
+
+    const h1Match = code.match(/"h1",\s*\{[^}]*"data-flimsy-file":\s*"src\/components\/Hero\.tsx",\s*"data-flimsy-line":\s*"(\d+)",\s*"data-flimsy-col":\s*"(\d+)"/);
+    const pMatch = code.match(/"p",\s*\{[^}]*"data-flimsy-file":\s*"src\/components\/Hero\.tsx",\s*"data-flimsy-line":\s*"(\d+)",\s*"data-flimsy-col":\s*"(\d+)"/);
+    expect(h1Match).not.toBeNull();
+    expect(pMatch).not.toBeNull();
+
+    const copyRes = await fetch(`${serverUrl}/__flimsy/api/copy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        targets: [
+          { file: 'src/components/Hero.tsx', line: parseInt(h1Match![1], 10), col: parseInt(h1Match![2], 10) },
+          { file: 'src/components/Hero.tsx', line: parseInt(pMatch![1], 10), col: parseInt(pMatch![2], 10) },
+        ],
+      }),
+    });
+
+    expect(copyRes.status).toBe(200);
+    const copyData = await copyRes.json();
+    expect(copyData.success).toBe(true);
+    expect(copyData.snippets.length).toBe(2);
+
+    const pasteRes = await fetch(`${serverUrl}/__flimsy/api/update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        file: 'src/components/Hero.tsx',
+        line: parseInt(pMatch![1], 10),
+        col: parseInt(pMatch![2], 10),
+        force: true,
+        action: {
+          type: 'paste-elements',
+          snippets: copyData.snippets,
+          position: 'after',
+        },
+      }),
+    });
+
+    expect(pasteRes.status).toBe(200);
+    const pasteData = await pasteRes.json();
+    expect(pasteData.success).toBe(true);
+
+    const disk = await fs.readFile(heroFilePath, 'utf-8');
+    expect(disk.match(/<h1/g)?.length).toBe(2);
+    expect(disk.match(/<p/g)?.length).toBe(2);
   });
 
   it('provides AI context packaging and offline heuristics at /__flimsy/api/ai', async () => {

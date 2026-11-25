@@ -24,6 +24,11 @@ export type UpdateAction =
       targetLine: number;
       targetColumn: number;
       position: 'inside' | 'before' | 'after';
+    }
+  | {
+      type: 'paste-elements';
+      snippets: string[];
+      position: 'after' | 'inside';
     };
 
 export interface UpdateSourceOptions {

@@ -4,6 +4,7 @@ import path from 'node:path';
 import {
   injectSourceLocations,
   updateSourceFile,
+  extractJSXSnippets,
   extractAIElementContext,
   resolveDesignHeuristic,
 } from 'flimsy-core';
@@ -109,6 +110,33 @@ export function flimsy(options: FlimsyOptions = {}): Plugin {
               res.statusCode = 500;
               res.setHeader('Content-Type', 'application/json');
               res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+          });
+          return;
+        }
+
+        if (req.url === '/__flimsy/api/copy' && req.method === 'POST') {
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const data = JSON.parse(body);
+              const targets = Array.isArray(data.targets)
+                ? data.targets.map((t: any) => ({
+                    filePath: t.file,
+                    line: Number(t.line),
+                    column: Number(t.col || 0),
+                  }))
+                : [];
+              const result = await extractJSXSnippets(targets, root);
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify(result));
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, snippets: [], error: err.message }));
             }
           });
           return;
