@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/logo.webp" alt="Flimsy Logo" width="140" />
+  <img src="./assets/logo.jpg" alt="Flimsy Logo" width="140" />
 </p>
 
 <h1 align="center">Flimsy</h1>

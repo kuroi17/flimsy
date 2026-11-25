@@ -14,7 +14,6 @@ export const clientScript = `
   let hoveredTarget = null;
   let selectedTarget = null;
   let selectedTargets = [];
-  // Per-element state map: WeakMap<Element, { originalClasses, originalText, pendingClasses, pendingText, fileMtime }>
   const targetStates = new WeakMap();
 
   let originalClasses = '';
@@ -24,24 +23,62 @@ export const clientScript = `
   let fileMtime = 0;
 
   let draggedElement = null;
-  let activeDropPosition = 'after'; // 'before' | 'inside' | 'after'
+  let activeDropPosition = 'after';
   const collapsedLayerKeys = new Set();
 
-  // Active color property target: 'fill' | 'text' | 'stroke'
+  // Active color target & panel disclosure state
   let activeColorTarget = 'fill';
-  let currentColorHsv = [42, 56, 85]; // Default honey gold: #d9b25f
+  let currentColorHsv = [217, 49, 23];
   let currentColorAlpha = 100;
   let isPaddingLinked = true;
   let isRadiusLinked = true;
   let isBorderSidesLinked = true;
+  let isBorderSectionOpen = false;
+  let isEffectsSectionOpen = false;
 
-  // History buffer for Undo/Redo (stores snapshots across all active targets)
+  // History buffer for Undo/Redo
   let history = [];
   let historyIdx = -1;
 
+  // --- Custom Flimsy Monochrome SVG Icon Registry (1.6px cohesive stroke language) ---
+  const ICONS = {
+    // Flimsy Logo Mark: curled ivory/white top sheet peeling over matte obsidian sheet
+    brand: '<svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5 14 9.5 20.5 14.5 11.5 19Z" fill="#09090b"/><path d="M3.5 9.2 13.8 5.2c1.2 4 3.4 5.8 6.4 6.5l-9.2 5.4c-3.2-.5-5.6-3.1-7.5-7.9Z" fill="#faf7ef" stroke="#09090b" stroke-width="1.35" stroke-linejoin="round"/><path d="M13.8 5.2c.4 3.5 2.1 5.6 5.4 6.5" stroke="#09090b" stroke-width="1.2" stroke-linecap="round"/></svg>',
+    // Custom Inspect Pointer (faceted arrow with notched inner tail)
+    cursor: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5 10.6 19.5l2.4-5.6 5.8-2.2L5 4.5Z"/><path d="m13 13.9 4.5 4.5"/></svg>',
+    // Custom Text Glyph (editorial T with crisp terminal serifs)
+    text: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6.5V5h14v1.5"/><path d="M12 5v14"/><path d="M9.2 19h5.6"/></svg>',
+    // Custom Flimsy Layers (two peeling stacked sheets matching brand mark)
+    layers: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5 12 5.5 20 9.5 12 13.5 4 9.5Z"/><path d="m4 14.2 8 4 8-4"/><path d="M15.5 7.2c-.3 1.7.7 2.8 2.3 3.2"/></svg>',
+    // Custom Precision Snap Crosshair-Grid
+    snap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round"><path d="M8.5 4.5v15"/><path d="M15.5 4.5v15"/><path d="M4.5 8.5h15"/><path d="M4.5 15.5h15"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg>',
+    undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7 4.5 11.5 9 16"/><path d="M5 11.5h9.5a4.5 4.5 0 0 1 0 9H12"/></svg>',
+    redo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m15 7 4.5 4.5L15 16"/><path d="M19 11.5H9.5a4.5 4.5 0 0 0 0 9H12"/></svg>',
+    ai: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14.3 9.7 20.5 12l-6.2 2.3L12 20.5l-2.3-6.2L3.5 12l6.2-2.3L12 3.5Z"/></svg>',
+    close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M17.5 6.5 6.5 17.5"/><path d="m6.5 6.5 11 11"/></svg>',
+    refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 0-2.3 5.6"/><path d="M20 5.5V12h-6.5"/></svg>',
+    chevronDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 10 5 5 5-5"/></svg>',
+    plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 6v12"/><path d="M6 12h12"/></svg>',
+    minus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 12h12"/></svg>',
+    flowRow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m14 7.5 4.5 4.5-4.5 4.5"/></svg>',
+    flowCol: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m7.5 14 4.5 4.5 4.5-4.5"/></svg>',
+    flowWrap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15"/><path d="M4.5 12h12a3 3 0 1 1 0 6h-3.5"/><path d="m15 15.5-2.5 2.5 2.5 2.5"/></svg>',
+    alignL: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4.5 6.5h15"/><path d="M4.5 12h9.5"/><path d="M4.5 17.5h12.5"/></svg>',
+    alignC: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4.5 6.5h15"/><path d="M7.25 12h9.5"/><path d="M5.75 17.5h12.5"/></svg>',
+    alignR: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4.5 6.5h15"/><path d="M10 12h9.5"/><path d="M7 17.5h12.5"/></svg>',
+    alignJ: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4.5 6.5h15"/><path d="M4.5 12h15"/><path d="M4.5 17.5h15"/></svg>',
+    sides: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M7 4.5h10"/><path d="M7 19.5h10"/><path d="M4.5 7v10"/><path d="M19.5 7v10"/></svg>',
+    corners: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M5 9V6.5A1.5 1.5 0 0 1 6.5 5H9"/><path d="M15 5h2.5A1.5 1.5 0 0 1 19 6.5V9"/><path d="M19 15v2.5a1.5 1.5 0 0 1-1.5 1.5H15"/><path d="M9 19H6.5A1.5 1.5 0 0 1 5 17.5V15"/></svg>',
+    eyedropper: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m14.5 6.5 3 3"/><path d="m17.5 4 2.5 2.5-9.5 9.5-3.5.8.8-3.5L17.5 4Z"/></svg>',
+    copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5h15"/><path d="M9.5 4h5"/><path d="M6.5 6.5v12a1.5 1.5 0 0 0 1.5 1.5h8a1.5 1.5 0 0 0 1.5-1.5v-12"/></svg>',
+    up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 14-5-5-5 5"/></svg>',
+    down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 10 5 5 5-5"/></svg>',
+    compDiamond: '<svg viewBox="0 0 12 12" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 1.3 10.7 6 6 10.7 1.3 6 6 1.3Z" fill="currentColor" fill-opacity="0.22"/></svg>',
+    frameBracket: '<svg viewBox="0 0 12 12" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 4.5V2.5h2"/><path d="M8 2.5h2v2"/><path d="M10 7.5v2H8"/><path d="M4 9.5H2v-2"/></svg>',
+  };
+
   // --- Live Optimistic Tailwind CSS Preview Engine ---
-  // Injects dynamic rules for pending/arbitrary Tailwind classes so edits render at 60fps
-  // immediately before Shift+S triggers Tailwind JIT compilation on disk.
   let liveStyleEl = document.getElementById('flimsy-live-preview');
   if (!liveStyleEl) {
     liveStyleEl = document.createElement('style');
@@ -127,7 +164,6 @@ export const clientScript = `
   function buildPreviewRule(cls) {
     if (!cls || cls.includes(':')) return null;
 
-    // Color arbitrary: bg-[#hex](/alpha), text-[#hex](/alpha), border-[#hex](/alpha)
     let m = cls.match(/^(bg|text|border)-\\[([^\\]]+)\\](?:\\/(\\d+))?$/);
     if (m) {
       const prop = m[1] === 'bg' ? 'background-color' : (m[1] === 'text' ? 'color' : 'border-color');
@@ -137,7 +173,6 @@ export const clientScript = `
     if (cls === 'text-transparent') return 'color: transparent;';
     if (cls === 'border-transparent') return 'border-color: transparent;';
 
-    // Dimensions
     m = cls.match(/^w-(.+)$/);
     if (m) {
       const len = resolveTwLength(m[1]);
@@ -149,20 +184,17 @@ export const clientScript = `
       if (len) return 'height: ' + len + ';';
     }
 
-    // Font size
     m = cls.match(/^text-\\[(\\d+(?:\\.\\d+)?(?:px|rem|em))\\]$/);
     if (m) return 'font-size: ' + m[1] + '; line-height: 1.15;';
     m = cls.match(/^text-(xs|sm|base|lg|xl|[2-9]xl)$/);
     if (m && TW_FONT_SIZE[m[1]]) return 'font-size: ' + TW_FONT_SIZE[m[1]] + ';';
 
-    // Text align & transform
     if (/^text-(left|center|right|justify)$/.test(cls)) return 'text-align: ' + cls.slice(5) + ';';
     if (cls === 'uppercase') return 'text-transform: uppercase;';
     if (cls === 'lowercase') return 'text-transform: lowercase;';
     if (cls === 'capitalize') return 'text-transform: capitalize;';
     if (cls === 'normal-case') return 'text-transform: none;';
 
-    // Font weight & family
     m = cls.match(/^font-(thin|extralight|light|normal|medium|semibold|bold|extrabold|black)$/);
     if (m) return 'font-weight: ' + TW_FONT_WEIGHT[m[1]] + ';';
     if (cls === 'font-sans') return 'font-family: ui-sans-serif, system-ui, sans-serif;';
@@ -171,7 +203,6 @@ export const clientScript = `
     m = cls.match(/^font-\\['?([^\\]']+)'?\\]$/);
     if (m) return 'font-family: "' + m[1].replace(/_/g, ' ') + '", sans-serif;';
 
-    // Leading & Tracking
     m = cls.match(/^leading-(.+)$/);
     if (m) {
       if (m[1].startsWith('[') && m[1].endsWith(']')) return 'line-height: ' + m[1].slice(1, -1) + ';';
@@ -183,7 +214,6 @@ export const clientScript = `
       if (TW_TRACKING[m[1]]) return 'letter-spacing: ' + TW_TRACKING[m[1]] + ';';
     }
 
-    // Display & Flex & Alignment & Gap
     if (cls === 'flex') return 'display: flex;';
     if (cls === 'inline-flex') return 'display: inline-flex;';
     if (cls === 'block') return 'display: block;';
@@ -210,7 +240,6 @@ export const clientScript = `
       if (len) return 'gap: ' + len + ';';
     }
 
-    // Padding & Margin
     m = cls.match(/^(p|px|py|pt|pr|pb|pl|m|mx|my|mt|mr|mb|ml)-(.+)$/);
     if (m) {
       const len = resolveTwLength(m[2]);
@@ -231,7 +260,6 @@ export const clientScript = `
       }
     }
 
-    // Border radius (master & independent corners)
     m = cls.match(/^rounded(?:-(tl|tr|br|bl))?(?:-(.+))?$/);
     if (m) {
       const corner = m[1];
@@ -244,7 +272,6 @@ export const clientScript = `
       }
     }
 
-    // Borders: style, master width, side widths
     if (/^border-(solid|dashed|dotted|double|none)$/.test(cls)) return 'border-style: ' + cls.slice(7) + ';';
     if (cls === 'border') return 'border-width: 1px; border-style: solid;';
     m = cls.match(/^border-(\\d+)$/);
@@ -258,7 +285,6 @@ export const clientScript = `
       return 'border-' + sideMap[m[1]] + '-width: ' + wVal + '; border-' + sideMap[m[1]] + '-style: solid;';
     }
 
-    // Opacity
     m = cls.match(/^opacity-(\\d+)$/);
     if (m) return 'opacity: ' + (parseInt(m[1], 10) / 100) + ';';
     m = cls.match(/^opacity-\\[([^\\]]+)\\]$/);
@@ -267,7 +293,6 @@ export const clientScript = `
       return 'opacity: ' + v + ';';
     }
 
-    // Transforms (composed cleanly via CSS variables so translate-x, translate-y, and rotate combine!)
     m = cls.match(/^(-)?rotate-(?:\\[([^\\]]+)\\]|(\\d+))$/);
     if (m) {
       const neg = m[1] ? '-' : '';
@@ -282,7 +307,6 @@ export const clientScript = `
       return varName + ': ' + val + '; transform: translate(var(--flimsy-tx, 0px), var(--flimsy-ty, 0px)) rotate(var(--flimsy-rot, 0deg));';
     }
 
-    // Effects: shadows & blurs
     m = cls.match(/^shadow(?:-(none|sm|md|lg|xl|2xl|inner))?$/);
     if (m) {
       const sh = TW_SHADOW[m[1] || ''];
@@ -319,22 +343,22 @@ export const clientScript = `
     }
   }
 
-  // --- Helpers for Typing Focus Guard (checks both Document and Shadow DOM) ---
+  // --- Helpers for Typing Focus Guard (Document + Shadow DOM) ---
   function isTypingInField(e) {
     const path = e && typeof e.composedPath === 'function' ? e.composedPath() : [];
     for (const node of path) {
       if (node && node.nodeType === 1) {
-        if (node.tagName === 'INPUT' || node.tagName === 'TEXTAREA' || node.isContentEditable) {
+        if (node.tagName === 'INPUT' || node.tagName === 'TEXTAREA' || node.tagName === 'SELECT' || node.isContentEditable) {
           return true;
         }
       }
     }
     const activeDoc = document.activeElement;
-    if (activeDoc && (activeDoc.tagName === 'INPUT' || activeDoc.tagName === 'TEXTAREA' || activeDoc.isContentEditable)) {
+    if (activeDoc && (activeDoc.tagName === 'INPUT' || activeDoc.tagName === 'TEXTAREA' || activeDoc.tagName === 'SELECT' || activeDoc.isContentEditable)) {
       return true;
     }
     const activeShadow = shadow && shadow.activeElement;
-    if (activeShadow && (activeShadow.tagName === 'INPUT' || activeShadow.tagName === 'TEXTAREA' || activeShadow.isContentEditable)) {
+    if (activeShadow && (activeShadow.tagName === 'INPUT' || activeShadow.tagName === 'TEXTAREA' || activeShadow.tagName === 'SELECT' || activeShadow.isContentEditable)) {
       return true;
     }
     return false;
@@ -431,7 +455,7 @@ export const clientScript = `
   const shadow = container.attachShadow({ mode: 'open' });
   document.documentElement.appendChild(container);
 
-  // --- Styling ---
+  // --- Editorial Monochrome White Glass Styling (Direction 04 + Shadcn Zinc Tokens) ---
   const style = document.createElement('style');
   style.textContent = \`
     * {
@@ -442,21 +466,25 @@ export const clientScript = `
     }
 
     :host {
-      --glass-bg: rgba(253, 248, 235, 0.92);
-      --glass-well: rgba(235, 224, 196, 0.54);
-      --glass-hover: rgba(217, 178, 95, 0.16);
-      --glass-border: rgba(201, 154, 59, 0.36);
-      --glass-hairline: rgba(30, 27, 22, 0.08);
-      --ink-primary: #1e1b16;
-      --ink-secondary: #5e5444;
-      --ink-muted: #8a7f6b;
-      --gold: #d9b25f;
-      --gold-strong: #c69a3b;
-      --gold-tint: rgba(217, 178, 95, 0.24);
+      --panel-bg: rgba(255, 255, 255, 0.94);
+      --dock-bg: rgba(255, 255, 255, 0.86);
+      --modal-bg: rgba(255, 255, 255, 0.96);
+      --well-bg: #f4f4f5;
+      --well-hover: #e4e4e7;
+      --input-bg: #fafafa;
+      --border-panel: rgba(9, 9, 11, 0.09);
+      --border-input: #e4e4e7;
+      --hairline: #f1f5f9;
+      --ink-primary: #09090b;
+      --ink-secondary: #52525b;
+      --ink-muted: #a1a1aa;
+      --active-bg: #09090b;
+      --active-ink: #ffffff;
       --figma-blue: #0ea5e9;
-      --figma-purple: #8b5cf6;
+      --comp-purple: #7c3aed;
+      --comp-soft: rgba(124, 58, 237, 0.10);
       --figma-red: #f43f5e;
-      --glass-shadow: 0 18px 42px rgba(24, 19, 12, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.78);
+      --glass-shadow: 0 22px 54px -12px rgba(0, 0, 0, 0.34), 0 0 0 0.5px rgba(9, 9, 11, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.92);
     }
 
     .no-scroll {
@@ -465,25 +493,25 @@ export const clientScript = `
     }
     .no-scroll::-webkit-scrollbar { display: none; }
 
-    /* Bottom-Center Floating Glass Pill Dock */
+    /* Bottom-Center Floating Frosted White Pill Dock */
     .bottom-dock {
       position: fixed;
       bottom: 18px;
       left: 50%;
       transform: translateX(-50%);
-      background: var(--glass-bg);
-      backdrop-filter: blur(22px) saturate(165%);
-      -webkit-backdrop-filter: blur(22px) saturate(165%);
-      border: 1px solid var(--glass-border);
+      background: var(--dock-bg);
+      backdrop-filter: blur(26px) saturate(180%);
+      -webkit-backdrop-filter: blur(26px) saturate(180%);
+      border: 1px solid var(--border-panel);
       box-shadow: var(--glass-shadow);
       padding: 5px 6px;
       border-radius: 9999px;
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 3px;
       pointer-events: auto;
       user-select: none;
-      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
       z-index: 2100;
     }
 
@@ -492,34 +520,40 @@ export const clientScript = `
       background: transparent;
       border: none;
       color: var(--ink-secondary);
-      width: 34px;
-      height: 34px;
+      width: 32px;
+      height: 32px;
       border-radius: 9999px;
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      transition: all 0.14s ease;
+      transition: background 0.12s ease, color 0.12s ease;
     }
-    .dock-tool svg { width: 16px; height: 16px; }
+    .dock-tool svg { width: 15px; height: 15px; }
     .dock-tool:hover:not(:disabled) {
-      background: var(--glass-hover);
+      background: var(--well-bg);
       color: var(--ink-primary);
     }
     .dock-tool.active {
-      background: var(--gold);
-      color: #1e1b16;
-      box-shadow: 0 2px 10px rgba(201, 154, 59, 0.35);
+      background: var(--active-bg);
+      color: var(--active-ink);
+      box-shadow: 0 2px 8px rgba(9, 9, 11, 0.22);
+    }
+    .dock-tool.subtle-active {
+      background: var(--well-bg);
+      color: var(--ink-primary);
     }
     .dock-tool:disabled {
-      opacity: 0.32;
+      opacity: 0.3;
       cursor: not-allowed;
     }
     .dock-tool.brand-mark {
       cursor: default;
-      opacity: 0.9;
+      width: 30px;
+      height: 30px;
     }
     .dock-tool.brand-mark:hover { background: transparent; }
+    .dock-tool.brand-mark svg { width: 18px; height: 18px; }
 
     .dock-tool[data-tip]:hover::after {
       content: attr(data-tip);
@@ -527,22 +561,22 @@ export const clientScript = `
       bottom: calc(100% + 10px);
       left: 50%;
       transform: translateX(-50%);
-      background: #1e1b16;
-      color: #fdf8eb;
+      background: #09090b;
+      color: #ffffff;
       font-size: 10px;
       font-weight: 500;
       padding: 4px 8px;
       border-radius: 6px;
       white-space: nowrap;
       pointer-events: none;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.24);
       z-index: 50;
     }
 
     .dock-divider {
       width: 1px;
-      height: 18px;
-      background: var(--glass-hairline);
+      height: 16px;
+      background: var(--border-input);
       margin: 0 3px;
     }
     .dock-extra {
@@ -556,38 +590,36 @@ export const clientScript = `
       font-weight: 600;
       padding: 4px 9px;
       border-radius: 9999px;
-      background: rgba(30, 27, 22, 0.06);
-      color: var(--ink-muted);
+      background: var(--well-bg);
+      color: var(--ink-secondary);
       cursor: pointer;
       white-space: nowrap;
       display: flex;
       align-items: center;
       gap: 5px;
-      transition: all 0.2s ease;
+      transition: all 0.16s ease;
     }
     .sync-status-badge .dot {
       width: 6px;
       height: 6px;
       border-radius: 50%;
-      background: var(--ink-muted);
+      background: #16a34a;
     }
     .sync-status-badge.dirty {
-      background: rgba(217, 178, 95, 0.25);
-      color: #7c5910;
-      border: 1px solid rgba(201, 154, 59, 0.4);
+      background: #09090b;
+      color: #ffffff;
     }
     .sync-status-badge.dirty .dot {
-      background: #c69a3b;
-      box-shadow: 0 0 6px #d9b25f;
+      background: #f59e0b;
+      box-shadow: 0 0 6px #f59e0b;
     }
     .sync-status-badge.synced {
-      background: rgba(22, 163, 74, 0.15);
-      color: #166534;
-      border: 1px solid rgba(22, 163, 74, 0.3);
+      background: rgba(22, 163, 74, 0.12);
+      color: #15803d;
     }
     .sync-status-badge.synced .dot { background: #16a34a; }
 
-    /* Hover Outline (Independent from Selected Box) */
+    /* Hover, Multi-Select, Marquee, Alt Measurement Overlays */
     .hover-outline {
       position: fixed;
       border: 1px solid rgba(14, 165, 233, 0.72);
@@ -598,8 +630,6 @@ export const clientScript = `
       border-radius: 2px;
       transition: top 0.05s ease-out, left 0.05s ease-out, width 0.05s ease-out, height 0.05s ease-out;
     }
-
-    /* Multi-select secondary boxes */
     .multi-box {
       position: fixed;
       border: 1.5px solid var(--figma-blue);
@@ -608,8 +638,6 @@ export const clientScript = `
       z-index: 998;
       border-radius: 2px;
     }
-
-    /* Marquee Selection Rectangle */
     .marquee-box {
       position: fixed;
       border: 1px solid var(--figma-blue);
@@ -619,8 +647,6 @@ export const clientScript = `
       z-index: 1050;
       border-radius: 2px;
     }
-
-    /* Alt Distance Measurement Guides (Figma Red) */
     .measure-layer {
       position: fixed;
       inset: 0;
@@ -633,10 +659,7 @@ export const clientScript = `
       background: var(--figma-red);
       pointer-events: none;
     }
-    .measure-line.dashed {
-      background: transparent;
-      border-color: rgba(244, 63, 94, 0.55);
-    }
+    .measure-line.dashed { background: transparent; }
     .measure-pill {
       position: fixed;
       background: var(--figma-red);
@@ -651,11 +674,11 @@ export const clientScript = `
       box-shadow: 0 2px 6px rgba(244, 63, 94, 0.32);
     }
 
-    /* Highlight Bounding Box with 8 Resize Handles + Rotation Knob */
+    /* Highlight Bounding Box + 8 Handles + Rotation Knob */
     .box-highlight {
       position: fixed;
       border: 1.5px solid var(--figma-blue);
-      background: rgba(14, 165, 233, 0.07);
+      background: rgba(14, 165, 233, 0.06);
       pointer-events: none;
       display: none;
       z-index: 1000;
@@ -663,10 +686,8 @@ export const clientScript = `
     }
     .box-highlight.selected {
       border: 1.5px solid var(--figma-blue);
-      background: rgba(14, 165, 233, 0.09);
-      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.65);
+      background: rgba(14, 165, 233, 0.08);
     }
-
     .handle {
       position: absolute;
       width: 8px;
@@ -682,8 +703,6 @@ export const clientScript = `
     }
     .handle:hover { transform: scale(1.25); }
     .box-highlight.selected .handle { display: block; }
-
-    /* 8 Transform Anchors */
     .handle-tl { top: -4px; left: -4px; cursor: nwse-resize; }
     .handle-tc { top: -4px; left: calc(50% - 4px); cursor: ns-resize; }
     .handle-tr { top: -4px; right: -4px; cursor: nesw-resize; }
@@ -693,13 +712,12 @@ export const clientScript = `
     .handle-bc { bottom: -4px; left: calc(50% - 4px); cursor: ns-resize; }
     .handle-br { bottom: -4px; right: -4px; cursor: nwse-resize; }
 
-    /* Rotation Stem & Knob */
     .handle-rotate-stem {
       position: absolute;
-      top: -20px;
+      top: -19px;
       left: 50%;
       width: 1px;
-      height: 16px;
+      height: 15px;
       background: var(--figma-blue);
       transform: translateX(-50%);
       display: none;
@@ -707,10 +725,10 @@ export const clientScript = `
     }
     .handle-rotate {
       position: absolute;
-      top: -28px;
+      top: -27px;
       left: 50%;
-      width: 11px;
-      height: 11px;
+      width: 10px;
+      height: 10px;
       transform: translateX(-50%);
       background: #ffffff;
       border: 1.5px solid var(--figma-blue);
@@ -729,23 +747,23 @@ export const clientScript = `
       position: absolute;
       bottom: calc(100% + 6px);
       left: 0;
-      background: rgba(253, 248, 235, 0.95);
+      background: rgba(255, 255, 255, 0.96);
       backdrop-filter: blur(12px);
       color: var(--ink-primary);
-      font-size: 11px;
+      font-size: 10.5px;
       font-weight: 600;
       padding: 2px 7px;
       border-radius: 6px;
       white-space: nowrap;
-      border: 1px solid var(--glass-border);
+      border: 1px solid var(--border-input);
       display: flex;
       align-items: center;
       gap: 6px;
-      box-shadow: 0 4px 12px rgba(24, 19, 12, 0.14);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
       pointer-events: none;
     }
-    .box-tooltip .tag-name { color: #0369a1; font-family: ui-monospace, SFMono-Regular, monospace; }
-    .box-tooltip .loc { color: var(--ink-muted); font-family: ui-monospace, SFMono-Regular, monospace; font-size: 10px; }
+    .box-tooltip .tag-name { color: #09090b; font-family: ui-monospace, SFMono-Regular, monospace; }
+    .box-tooltip .loc { color: var(--ink-muted); font-family: ui-monospace, SFMono-Regular, monospace; font-size: 9.5px; }
 
     .dim-pill {
       position: absolute;
@@ -764,12 +782,12 @@ export const clientScript = `
       pointer-events: none;
     }
 
-    /* Shared Glass Island Base */
+    /* Shared Editorial Frosted Snow-White Card */
     .glass-card {
-      background: var(--glass-bg);
-      backdrop-filter: blur(24px) saturate(165%);
-      -webkit-backdrop-filter: blur(24px) saturate(165%);
-      border: 1px solid var(--glass-border);
+      background: var(--panel-bg);
+      backdrop-filter: blur(22px) saturate(160%);
+      -webkit-backdrop-filter: blur(22px) saturate(160%);
+      border: 1px solid var(--border-panel);
       border-radius: 14px;
       box-shadow: var(--glass-shadow);
       color: var(--ink-primary);
@@ -777,19 +795,19 @@ export const clientScript = `
       animation: floatIn 0.14s cubic-bezier(0.16, 1, 0.3, 1);
     }
     @keyframes floatIn {
-      from { opacity: 0; transform: translateY(4px) scale(0.99); }
+      from { opacity: 0; transform: translateY(3px) scale(0.99); }
       to { opacity: 1; transform: translateY(0) scale(1); }
     }
 
-    /* Left Floating Full Layers Tree */
+    /* Left Floating Layers Tree */
     .layers-panel {
       position: fixed;
       top: 16px;
       left: 16px;
-      width: 248px;
-      max-height: calc(100vh - 104px);
+      width: 242px;
+      max-height: calc(100vh - 96px);
       overflow-y: auto;
-      padding: 10px;
+      padding: 11px;
       display: none;
       flex-direction: column;
       gap: 6px;
@@ -799,16 +817,17 @@ export const clientScript = `
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 0 4px 6px;
-      border-bottom: 1px solid var(--glass-hairline);
-      font-size: 11px;
+      padding: 1px 4px 8px;
+      border-bottom: 1px solid var(--hairline);
+      font-size: 11.5px;
       font-weight: 600;
-      color: var(--ink-secondary);
+      color: var(--ink-primary);
+      letter-spacing: -0.01em;
     }
     .layers-header-actions {
       display: flex;
       align-items: center;
-      gap: 3px;
+      gap: 2px;
     }
     .trail {
       display: flex;
@@ -817,9 +836,8 @@ export const clientScript = `
     }
     .trail-item {
       padding: 4px 6px;
-      border-radius: 6px;
+      border-radius: 7px;
       font-size: 11px;
-      font-family: ui-monospace, SFMono-Regular, monospace;
       color: var(--ink-secondary);
       white-space: nowrap;
       display: flex;
@@ -831,30 +849,31 @@ export const clientScript = `
       border: 1.5px solid transparent;
     }
     .trail-item:hover {
-      background: var(--glass-hover);
+      background: var(--well-bg);
       color: var(--ink-primary);
     }
     .trail-item.active {
-      background: rgba(14, 165, 233, 0.16);
-      color: #0369a1;
+      background: #09090b;
+      color: #ffffff;
+      font-weight: 500;
+    }
+    .trail-item.is-component { color: var(--comp-purple); }
+    .trail-item.is-component.active {
+      background: var(--comp-soft);
+      color: #5b21b6;
       font-weight: 600;
     }
-    .trail-item.is-component {
-      color: #6d28d9;
-    }
-    .trail-item.is-component.active {
-      background: rgba(139, 92, 246, 0.16);
-      color: #5b21b6;
-    }
-    .trail-item.drop-before {
-      border-top: 2px solid var(--figma-blue);
-    }
-    .trail-item.drop-after {
-      border-bottom: 2px solid var(--figma-blue);
-    }
+    .trail-item.active .caret-btn { color: rgba(255, 255, 255, 0.72); }
+    .trail-item.is-component.active .caret-btn { color: var(--comp-purple); }
+    .trail-item.active .trail-btn { color: rgba(255, 255, 255, 0.75); }
+    .trail-item.active .trail-btn:hover { background: rgba(255, 255, 255, 0.16); color: #ffffff; }
+    .trail-item.is-component.active .trail-btn { color: var(--comp-purple); }
+
+    .trail-item.drop-before { border-top: 2px solid var(--figma-blue); }
+    .trail-item.drop-after { border-bottom: 2px solid var(--figma-blue); }
     .trail-item.drop-inside {
       border: 1.5px dashed var(--figma-blue);
-      background: rgba(14, 165, 233, 0.14);
+      background: rgba(14, 165, 233, 0.10);
     }
     .caret-btn {
       width: 14px;
@@ -871,52 +890,48 @@ export const clientScript = `
       padding: 0;
       transition: transform 0.12s ease;
     }
-    .caret-btn:hover { background: rgba(30, 27, 22, 0.08); color: var(--ink-primary); }
+    .caret-btn svg { width: 10px; height: 10px; }
+    .caret-btn:hover { background: rgba(9, 9, 11, 0.06); color: var(--ink-primary); }
     .caret-btn.collapsed svg { transform: rotate(-90deg); }
-    .caret-spacer {
-      width: 14px;
-      height: 14px;
-      flex-shrink: 0;
-    }
+    .caret-spacer { width: 14px; height: 14px; flex-shrink: 0; }
     .trail-title {
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 5px;
       cursor: pointer;
       overflow: hidden;
       text-overflow: ellipsis;
       flex: 1;
     }
     .type-icon {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
       font-size: 9px;
       font-weight: 700;
-      padding: 1px 4px;
-      border-radius: 3px;
-      background: rgba(30, 27, 22, 0.08);
-      color: var(--ink-muted);
-      font-family: Inter, sans-serif;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
     }
-    .type-icon.text-icon {
-      background: rgba(14, 165, 233, 0.15);
-      color: #0284c7;
-    }
-    .type-icon.frame-icon {
-      background: rgba(201, 154, 59, 0.2);
-      color: #7c5910;
-    }
-    .type-icon.comp-icon {
-      background: rgba(139, 92, 246, 0.18);
-      color: #7c3aed;
-      padding: 2px 3px;
+    .type-icon.text-icon { background: rgba(14, 165, 233, 0.12); color: #0284c7; }
+    .type-icon.frame-icon { background: var(--well-bg); color: var(--ink-secondary); }
+    .type-icon.comp-icon { background: var(--comp-soft); color: var(--comp-purple); }
+    .trail-item.active:not(.is-component) .type-icon {
+      background: rgba(255, 255, 255, 0.16);
+      color: #ffffff;
     }
     .node-name {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      font-size: 11px;
+    }
+    .node-tag-dim {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 9.5px;
+      opacity: 0.55;
+      margin-left: 2px;
     }
     .trail-actions {
       display: none;
@@ -924,9 +939,7 @@ export const clientScript = `
       gap: 1px;
     }
     .trail-item:hover .trail-actions,
-    .trail-item.active .trail-actions {
-      display: flex;
-    }
+    .trail-item.active .trail-actions { display: flex; }
     .trail-btn {
       background: transparent;
       border: none;
@@ -941,23 +954,20 @@ export const clientScript = `
       padding: 0;
     }
     .trail-btn svg { width: 10px; height: 10px; }
-    .trail-btn:hover {
-      background: var(--glass-hover);
-      color: var(--ink-primary);
-    }
+    .trail-btn:hover { background: var(--well-hover); color: var(--ink-primary); }
 
-    /* Right Floating Inspector Card */
+    /* Right Floating Streamlined Inspector Card */
     .studio-panel {
       position: fixed;
       top: 16px;
       right: 16px;
-      width: 308px;
-      max-height: calc(100vh - 96px);
+      width: 288px;
+      max-height: calc(100vh - 92px);
       overflow-y: auto;
-      padding: 12px;
+      padding: 13px;
       display: none;
       flex-direction: column;
-      gap: 9px;
+      gap: 10px;
       z-index: 2000;
     }
 
@@ -965,9 +975,9 @@ export const clientScript = `
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding-bottom: 8px;
-      border-bottom: 1px solid var(--glass-hairline);
-      gap: 8px;
+      padding-bottom: 9px;
+      border-bottom: 1px solid var(--hairline);
+      gap: 6px;
     }
     .studio-header-left {
       display: flex;
@@ -980,12 +990,15 @@ export const clientScript = `
       font-family: ui-monospace, SFMono-Regular, monospace;
       font-size: 11px;
       font-weight: 600;
-      color: #0369a1;
-      background: rgba(14, 165, 233, 0.12);
-      border: 1px solid rgba(14, 165, 233, 0.3);
+      color: var(--ink-primary);
+      background: var(--well-bg);
       padding: 2px 7px;
       border-radius: 6px;
       white-space: nowrap;
+    }
+    .studio-tag-badge.is-comp {
+      background: var(--comp-soft);
+      color: var(--comp-purple);
     }
     .studio-loc-badge {
       font-size: 10px;
@@ -996,13 +1009,12 @@ export const clientScript = `
       text-overflow: ellipsis;
     }
     .instance-badge {
-      font-size: 10px;
+      font-size: 9.5px;
       font-weight: 600;
       padding: 1px 6px;
       border-radius: 9999px;
-      background: rgba(217, 178, 95, 0.25);
-      color: #7c5910;
-      border: 1px solid rgba(201, 154, 59, 0.4);
+      background: var(--well-bg);
+      color: var(--ink-secondary);
       display: none;
       white-space: nowrap;
       flex-shrink: 0;
@@ -1012,27 +1024,27 @@ export const clientScript = `
       border: none;
       color: var(--ink-muted);
       cursor: pointer;
-      width: 24px;
-      height: 24px;
+      width: 22px;
+      height: 22px;
       border-radius: 6px;
       display: flex;
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      transition: all 0.12s;
+      transition: background 0.12s, color 0.12s;
     }
     .icon-btn svg { width: 13px; height: 13px; }
     .icon-btn:hover:not(:disabled) {
-      background: var(--glass-hover);
+      background: var(--well-bg);
       color: var(--ink-primary);
     }
 
     .prop-section {
       display: flex;
       flex-direction: column;
-      gap: 5px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid var(--glass-hairline);
+      gap: 7px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--hairline);
     }
     .prop-section.no-divider {
       border-bottom: none;
@@ -1042,21 +1054,103 @@ export const clientScript = `
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 8px;
+      gap: 6px;
     }
     .prop-label {
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 600;
-      color: var(--ink-muted);
-      letter-spacing: 0.2px;
+      color: var(--ink-primary);
+      letter-spacing: -0.01em;
       flex-shrink: 0;
     }
+    .prop-sub {
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--ink-muted);
+    }
 
+    /* Compact 2-column Shadcn Field Grid */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .field-box {
+      height: 29px;
+      background: var(--input-bg);
+      border: 1px solid var(--border-input);
+      border-radius: 7px;
+      padding: 0 7px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: border-color 0.12s, background 0.12s;
+    }
+    .field-box:focus-within {
+      border-color: #09090b;
+      background: #ffffff;
+    }
+    .field-k {
+      font-size: 9.5px;
+      font-weight: 600;
+      color: var(--ink-muted);
+      flex-shrink: 0;
+      user-select: none;
+    }
+    .field-input {
+      width: 100%;
+      min-width: 0;
+      border: none;
+      background: transparent;
+      outline: none;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--ink-primary);
+      text-align: right;
+    }
+    .field-select {
+      width: 100%;
+      min-width: 0;
+      height: 29px;
+      background: var(--input-bg);
+      border: 1px solid var(--border-input);
+      border-radius: 7px;
+      padding: 0 7px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--ink-primary);
+      outline: none;
+      cursor: pointer;
+    }
+    .field-select:focus {
+      border-color: #09090b;
+      background: #ffffff;
+    }
+    .mini-toggle-btn {
+      width: 19px;
+      height: 19px;
+      border-radius: 5px;
+      border: none;
+      background: transparent;
+      color: var(--ink-muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all 0.12s;
+    }
+    .mini-toggle-btn svg { width: 11px; height: 11px; }
+    .mini-toggle-btn:hover { background: var(--well-hover); color: var(--ink-primary); }
+    .mini-toggle-btn.active { background: var(--active-bg); color: var(--active-ink); }
+
+    /* Monochrome Segmented Pills */
     .segmented {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
-      background: var(--glass-well);
-      border-radius: 8px;
+      background: var(--well-bg);
+      border-radius: 7px;
       padding: 2px;
       gap: 2px;
     }
@@ -1066,57 +1160,60 @@ export const clientScript = `
       color: var(--ink-secondary);
       font-size: 10px;
       font-weight: 500;
-      padding: 4px 0;
-      border-radius: 6px;
+      height: 23px;
+      border-radius: 5px;
       cursor: pointer;
-      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       transition: all 0.12s;
     }
+    .seg-btn svg { width: 12px; height: 12px; }
     .seg-btn:hover { color: var(--ink-primary); }
     .seg-btn.active {
-      background: #fffdf7;
-      color: var(--ink-primary);
+      background: var(--active-bg);
+      color: var(--active-ink);
       font-weight: 600;
-      box-shadow: 0 1px 3px rgba(30, 27, 22, 0.12);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
     }
 
-    /* Compact Range Slider (Opacity) */
+    /* Compact Range Slider (Obsidian Ink) */
     .mini-slider {
       -webkit-appearance: none;
       appearance: none;
       flex: 1;
-      height: 5px;
+      height: 4px;
       border-radius: 9999px;
-      background: var(--glass-well);
+      background: var(--well-hover);
       outline: none;
       cursor: pointer;
     }
     .mini-slider::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
-      width: 13px;
-      height: 13px;
+      width: 12px;
+      height: 12px;
       border-radius: 50%;
-      background: var(--gold);
-      border: 1.5px solid #1e1b16;
+      background: #ffffff;
+      border: 2px solid #09090b;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
       cursor: pointer;
     }
 
-    /* 3x3 Auto Layout Matrix */
+    /* 3x3 Alignment Matrix */
     .align-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      width: 54px;
-      height: 54px;
-      background: var(--glass-well);
+      width: 62px;
+      height: 62px;
+      background: var(--well-bg);
       border-radius: 8px;
-      padding: 3px;
-      gap: 2px;
+      padding: 4px;
+      gap: 3px;
       flex-shrink: 0;
     }
     .align-cell {
-      background: rgba(255, 253, 247, 0.6);
-      border-radius: 3px;
+      border-radius: 4px;
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -1129,15 +1226,11 @@ export const clientScript = `
       height: 4px;
       background: var(--ink-muted);
       border-radius: 50%;
-      opacity: 0.4;
+      opacity: 0.6;
     }
-    .align-cell:hover::after {
-      background: var(--ink-primary);
-      opacity: 0.8;
-      transform: scale(1.2);
-    }
-    .align-cell.active { background: var(--gold); }
-    .align-cell.active::after { background: #1e1b16; opacity: 1; }
+    .align-cell:hover::after { background: var(--ink-primary); opacity: 0.9; }
+    .align-cell.active { background: var(--active-bg); }
+    .align-cell.active::after { background: #ffffff; opacity: 1; }
 
     .side-box-grid {
       display: grid;
@@ -1162,32 +1255,66 @@ export const clientScript = `
       padding: 3px 2px;
       font-size: 10px;
       font-family: ui-monospace, SFMono-Regular, monospace;
-      background: rgba(255, 253, 247, 0.78);
-      border: 1px solid rgba(30, 27, 22, 0.12);
+      background: var(--input-bg);
+      border: 1px solid var(--border-input);
       border-radius: 6px;
       outline: none;
       color: var(--ink-primary);
     }
-    .side-input:focus { border-color: var(--gold-strong); background: #fffdf7; }
+    .side-input:focus { border-color: #09090b; background: #ffffff; }
+
+    /* Accordion Headers (Stroke & Border, Effects) */
+    .accordion-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+      padding: 1px 0;
+    }
+    .accordion-plus {
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      border: none;
+      background: var(--well-bg);
+      color: var(--ink-secondary);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+    .accordion-plus svg { width: 11px; height: 11px; }
+    .accordion-header:hover .accordion-plus { background: var(--well-hover); color: var(--ink-primary); }
+    .accordion-body {
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+      padding-top: 2px;
+    }
+    .accordion-body.open { display: flex; }
 
     /* Color Trigger Row */
     .color-preview-trigger {
       display: flex;
       align-items: center;
-      gap: 7px;
-      background: rgba(255, 253, 247, 0.78);
-      border: 1px solid rgba(30, 27, 22, 0.12);
+      gap: 8px;
+      background: var(--input-bg);
+      border: 1px solid var(--border-input);
       border-radius: 8px;
-      padding: 4px 8px;
+      padding: 5px 8px 5px 5px;
       cursor: pointer;
       width: 100%;
+      transition: border-color 0.12s;
     }
+    .color-preview-trigger:hover { border-color: #a1a1aa; }
     .color-preview-thumb {
-      width: 20px;
-      height: 20px;
+      width: 19px;
+      height: 19px;
       border-radius: 5px;
-      border: 1px solid rgba(30, 27, 22, 0.2);
-      background: #d9b25f;
+      border: 1px solid rgba(9, 9, 11, 0.14);
+      background: #1e293b;
       flex-shrink: 0;
     }
     .color-preview-hex {
@@ -1198,19 +1325,19 @@ export const clientScript = `
       flex: 1;
     }
 
-    /* Figma 2D Spectrum Color Popover Modal */
+    /* Floating 2D Spectrum Color Picker Modal */
     .figma-color-modal {
       position: fixed;
-      top: 50px;
-      right: 332px;
+      top: 56px;
+      right: 314px;
       width: 244px;
-      background: var(--glass-bg);
+      background: var(--modal-bg);
       backdrop-filter: blur(28px);
       -webkit-backdrop-filter: blur(28px);
-      border: 1px solid var(--glass-border);
-      border-radius: 12px;
-      box-shadow: 0 20px 48px rgba(0, 0, 0, 0.22);
-      padding: 10px;
+      border: 1px solid var(--border-panel);
+      border-radius: 14px;
+      box-shadow: var(--glass-shadow);
+      padding: 11px;
       display: none;
       flex-direction: column;
       gap: 9px;
@@ -1225,70 +1352,51 @@ export const clientScript = `
       overflow: hidden;
       cursor: crosshair;
     }
-    .color-canvas {
-      width: 100%;
-      height: 100%;
-      display: block;
-    }
+    .color-canvas { width: 100%; height: 100%; display: block; }
     .canvas-thumb {
       position: absolute;
       width: 12px;
       height: 12px;
       border: 2px solid #ffffff;
       border-radius: 50%;
-      box-shadow: 0 0 4px rgba(0,0,0,0.45);
+      box-shadow: 0 0 4px rgba(0, 0, 0, 0.45);
       transform: translate(-50%, -50%);
       pointer-events: none;
       left: 50%;
       top: 50%;
     }
-
-    /* Rainbow Hue Slider */
     .hue-slider {
       -webkit-appearance: none;
       appearance: none;
       width: 100%;
-      height: 12px;
+      height: 11px;
       border-radius: 6px;
       background: linear-gradient(to right, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%);
       outline: none;
       cursor: pointer;
     }
-    .hue-slider::-webkit-slider-thumb {
+    .hue-slider::-webkit-slider-thumb,
+    .alpha-slider::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
-      width: 14px;
-      height: 14px;
+      width: 13px;
+      height: 13px;
       border-radius: 50%;
       background: #ffffff;
-      border: 1.5px solid rgba(0,0,0,0.3);
-      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      border: 1.5px solid rgba(9, 9, 11, 0.35);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
       cursor: pointer;
     }
-
-    /* Alpha Slider with checkerboard */
     .alpha-slider {
       -webkit-appearance: none;
       appearance: none;
       width: 100%;
-      height: 12px;
+      height: 11px;
       border-radius: 6px;
-      background: linear-gradient(to right, transparent, #d9b25f), repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 50% / 8px 8px;
+      background: linear-gradient(to right, transparent, #09090b), repeating-conic-gradient(#d4d4d8 0% 25%, #fff 0% 50%) 50% / 8px 8px;
       outline: none;
       cursor: pointer;
     }
-    .alpha-slider::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 14px;
-      height: 14px;
-      border-radius: 50%;
-      background: #ffffff;
-      border: 1.5px solid rgba(0,0,0,0.3);
-      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-      cursor: pointer;
-    }
-
     .doc-colors-grid {
       display: grid;
       grid-template-columns: repeat(8, 1fr);
@@ -1300,42 +1408,46 @@ export const clientScript = `
       width: 20px;
       height: 20px;
       border-radius: 4px;
-      border: 1px solid rgba(30, 27, 22, 0.15);
+      border: 1px solid rgba(9, 9, 11, 0.14);
       cursor: pointer;
       transition: transform 0.12s;
     }
     .doc-chip:hover { transform: scale(1.15); }
 
-    /* Figma Typography Font Modal */
+    /* Searchable Typography Font Modal */
     .font-select-trigger {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      background: rgba(255, 253, 247, 0.78);
-      border: 1px solid rgba(30, 27, 22, 0.12);
-      border-radius: 8px;
-      padding: 5px 9px;
+      height: 29px;
+      background: var(--input-bg);
+      border: 1px solid var(--border-input);
+      border-radius: 7px;
+      padding: 0 9px;
       cursor: pointer;
       font-size: 11px;
+      font-weight: 500;
       color: var(--ink-primary);
       width: 100%;
+      transition: border-color 0.12s;
     }
+    .font-select-trigger:hover { border-color: #a1a1aa; }
     .font-modal {
       position: fixed;
-      top: 140px;
-      right: 332px;
-      width: 218px;
-      background: var(--glass-bg);
+      top: 148px;
+      right: 314px;
+      width: 220px;
+      background: var(--modal-bg);
       backdrop-filter: blur(28px);
       -webkit-backdrop-filter: blur(28px);
-      border: 1px solid var(--glass-border);
-      border-radius: 12px;
-      box-shadow: 0 20px 48px rgba(0, 0, 0, 0.22);
-      padding: 8px;
+      border: 1px solid var(--border-panel);
+      border-radius: 14px;
+      box-shadow: var(--glass-shadow);
+      padding: 9px;
       display: none;
       flex-direction: column;
       gap: 6px;
-      max-height: 264px;
+      max-height: 268px;
       z-index: 2500;
       pointer-events: auto;
     }
@@ -1355,29 +1467,29 @@ export const clientScript = `
       justify-content: space-between;
       font-size: 12px;
       color: var(--ink-primary);
-      transition: background 0.12s;
+      transition: background 0.1s;
     }
-    .font-row:hover { background: var(--glass-hover); }
+    .font-row:hover { background: var(--well-bg); }
     .font-row.active {
-      background: rgba(14, 165, 233, 0.15);
-      color: #0369a1;
-      font-weight: 600;
+      background: var(--active-bg);
+      color: var(--active-ink);
+      font-weight: 500;
     }
 
     .clean-input {
-      background: rgba(255, 253, 247, 0.78);
-      border: 1px solid rgba(30, 27, 22, 0.12);
-      border-radius: 8px;
-      padding: 4px 8px;
+      background: var(--input-bg);
+      border: 1px solid var(--border-input);
+      border-radius: 7px;
+      padding: 5px 8px;
       color: var(--ink-primary);
       font-size: 11px;
       outline: none;
       width: 100%;
-      transition: border-color 0.15s, background 0.15s;
+      transition: border-color 0.12s, background 0.12s;
     }
     .clean-input:focus {
-      border-color: var(--gold-strong);
-      background: #fffdf7;
+      border-color: #09090b;
+      background: #ffffff;
     }
 
     .drawer-pills {
@@ -1386,7 +1498,7 @@ export const clientScript = `
       align-items: center;
     }
     .pill-toggle {
-      background: var(--glass-well);
+      background: var(--well-bg);
       border: 1px solid transparent;
       color: var(--ink-secondary);
       font-size: 10px;
@@ -1400,26 +1512,24 @@ export const clientScript = `
       transition: all 0.12s;
     }
     .pill-toggle svg { width: 11px; height: 11px; }
-    .pill-toggle:hover { color: var(--ink-primary); background: var(--glass-hover); }
+    .pill-toggle:hover { color: var(--ink-primary); background: var(--well-hover); }
     .pill-toggle.active {
-      background: var(--gold-tint);
-      border-color: rgba(201, 154, 59, 0.35);
-      color: var(--ink-primary);
-      font-weight: 600;
+      background: var(--active-bg);
+      color: var(--active-ink);
     }
 
     .ai-drawer {
       display: none;
       flex-direction: column;
       gap: 6px;
-      background: rgba(255, 253, 247, 0.55);
-      border: 1px solid var(--glass-hairline);
+      background: var(--input-bg);
+      border: 1px solid var(--border-input);
       padding: 8px;
       border-radius: 9px;
     }
     .ai-chip {
-      background: rgba(255, 253, 247, 0.8);
-      border: 1px solid rgba(30, 27, 22, 0.1);
+      background: #ffffff;
+      border: 1px solid var(--border-input);
       color: var(--ink-secondary);
       border-radius: 5px;
       padding: 2px 7px;
@@ -1429,22 +1539,22 @@ export const clientScript = `
       transition: all 0.12s;
     }
     .ai-chip:hover {
-      background: var(--gold-tint);
-      color: var(--ink-primary);
-      border-color: var(--gold-strong);
+      background: #09090b;
+      color: #ffffff;
+      border-color: #09090b;
     }
 
     .diff-container {
-      background: rgba(255, 253, 247, 0.72);
-      border: 1px solid var(--glass-hairline);
+      background: var(--input-bg);
+      border: 1px solid var(--border-input);
       border-radius: 8px;
-      padding: 7px;
+      padding: 6px;
       font-family: ui-monospace, SFMono-Regular, monospace;
-      font-size: 10.5px;
+      font-size: 10px;
       display: none;
       flex-direction: column;
       gap: 3px;
-      max-height: 92px;
+      max-height: 84px;
       overflow-y: auto;
     }
     .diff-del {
@@ -1456,15 +1566,15 @@ export const clientScript = `
     }
     .diff-add {
       color: #166534;
-      background: rgba(22, 163, 74, 0.1);
+      background: rgba(22, 163, 74, 0.10);
       padding: 2px 5px;
       border-radius: 4px;
       word-break: break-all;
     }
 
     .action-btn {
-      background: var(--gold);
-      color: #1e1b16;
+      background: #09090b;
+      color: #ffffff;
       border: none;
       border-radius: 7px;
       padding: 5px 10px;
@@ -1475,9 +1585,9 @@ export const clientScript = `
       align-items: center;
       justify-content: center;
       gap: 4px;
-      transition: background 0.15s;
+      transition: opacity 0.14s;
     }
-    .action-btn:hover { background: var(--gold-strong); }
+    .action-btn:hover { opacity: 0.88; }
 
     .sync-row {
       display: flex;
@@ -1487,49 +1597,48 @@ export const clientScript = `
     }
     .sync-btn {
       flex: 1;
-      background: var(--glass-well);
+      background: var(--well-bg);
       color: var(--ink-secondary);
-      border: 1px solid rgba(30, 27, 22, 0.08);
+      border: 1px solid transparent;
       border-radius: 9px;
-      padding: 8px 12px;
-      font-size: 11.5px;
+      height: 32px;
+      font-size: 11px;
       font-weight: 600;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 6px;
-      transition: all 0.15s;
+      transition: all 0.14s;
     }
     .sync-btn.dirty {
-      background: var(--gold);
-      color: #1e1b16;
-      border-color: var(--gold-strong);
-      box-shadow: 0 4px 12px rgba(201, 154, 59, 0.3);
+      background: #09090b;
+      color: #ffffff;
+      box-shadow: 0 4px 12px rgba(9, 9, 11, 0.22);
     }
-    .sync-btn.dirty:hover { background: var(--gold-strong); }
-    .sync-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .sync-btn.dirty:hover { background: #18181b; }
+    .sync-btn:disabled { opacity: 0.55; cursor: not-allowed; }
     .discard-btn {
-      background: transparent;
+      background: var(--well-bg);
       color: var(--ink-secondary);
-      border: 1px solid var(--glass-hairline);
+      border: none;
       border-radius: 9px;
-      padding: 8px 10px;
+      height: 32px;
+      padding: 0 11px;
       font-size: 11px;
       font-weight: 500;
       cursor: pointer;
       transition: all 0.12s;
     }
     .discard-btn:hover {
-      background: var(--glass-hover);
+      background: var(--well-hover);
       color: var(--ink-primary);
     }
     .sync-status {
-      font-size: 10.5px;
-      color: #166534;
+      font-size: 10px;
+      color: #15803d;
       text-align: center;
       display: none;
-      padding-top: 2px;
       font-weight: 500;
     }
   \`;
@@ -1557,38 +1666,22 @@ export const clientScript = `
   const dock = document.createElement('div');
   dock.className = 'bottom-dock';
   dock.innerHTML = \`
-    <button class="dock-tool dock-btn" data-tip="Inspect (Alt+X)" aria-label="Toggle Inspect">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 4 7.07 17 2.51-7.39L21 11.07z"/></svg>
-    </button>
+    <button class="dock-tool dock-btn" data-tip="Inspect (Alt+X)" aria-label="Toggle Inspect">\${ICONS.cursor}</button>
     <div class="dock-extra" id="flimsy-dock-extra" style="display:none;">
-      <button class="dock-tool" id="flimsy-text-tool" data-tip="Edit Text" aria-label="Edit Text">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
-      </button>
-      <button class="dock-tool active" id="flimsy-layers-toggle" data-tip="Layers" aria-label="Toggle Layers">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
-      </button>
-      <button class="dock-tool active" id="flimsy-snap-toggle" data-tip="Snap to Tailwind Scale (Ctrl to bypass)" aria-label="Toggle Tailwind Snap">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h16"/><path d="M4 16h16"/><path d="M8 4v16"/><path d="M16 4v16"/></svg>
-      </button>
+      <button class="dock-tool" id="flimsy-text-tool" data-tip="Edit Text" aria-label="Edit Text">\${ICONS.text}</button>
+      <button class="dock-tool subtle-active" id="flimsy-layers-toggle" data-tip="Layers" aria-label="Toggle Layers">\${ICONS.layers}</button>
+      <button class="dock-tool subtle-active" id="flimsy-snap-toggle" data-tip="Snap to Scale (Ctrl bypass)" aria-label="Toggle Tailwind Snap">\${ICONS.snap}</button>
       <div class="dock-divider"></div>
-      <button class="dock-tool" id="flimsy-undo-btn" data-tip="Undo (Ctrl+Z)" aria-label="Undo" disabled>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
-      </button>
-      <button class="dock-tool" id="flimsy-redo-btn" data-tip="Redo (Ctrl+Y)" aria-label="Redo" disabled>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/></svg>
-      </button>
-      <button class="dock-tool" id="flimsy-dock-ai-btn" data-tip="AI Assist" aria-label="AI Assist">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg>
-      </button>
+      <button class="dock-tool" id="flimsy-undo-btn" data-tip="Undo (Ctrl+Z)" aria-label="Undo" disabled>\${ICONS.undo}</button>
+      <button class="dock-tool" id="flimsy-redo-btn" data-tip="Redo (Ctrl+Y)" aria-label="Redo" disabled>\${ICONS.redo}</button>
+      <button class="dock-tool" id="flimsy-dock-ai-btn" data-tip="AI Assist" aria-label="AI Assist">\${ICONS.ai}</button>
     </div>
     <div class="dock-divider"></div>
     <div class="sync-status-badge" id="flimsy-dock-sync-status" title="Press Shift+S to sync changes to code">
       <span class="dot"></span>
       <span class="text">In sync</span>
     </div>
-    <span class="dock-tool brand-mark" data-tip="Flimsy Visual Sync">
-      <svg viewBox="0 0 24 24" fill="none" stroke="#c69a3b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5 14.5 4 20 11.5 9.5 19Z" fill="rgba(253, 246, 223, 0.9)"/><path d="M14.5 4c-.8 4.2 1.2 6.8 5.5 7.5" fill="rgba(217, 178, 95, 0.45)"/></svg>
-    </span>
+    <span class="dock-tool brand-mark" data-tip="Flimsy">\${ICONS.brand}</span>
   \`;
   shadow.appendChild(dock);
 
@@ -1602,12 +1695,12 @@ export const clientScript = `
   const dockAiBtn = dock.querySelector('#flimsy-dock-ai-btn');
   const dockSyncBadge = dock.querySelector('#flimsy-dock-sync-status');
 
-  // --- Highlight Box with 8 Interactive Grab Handles + Rotation Knob ---
+  // --- Highlight Box with 8 Grab Handles + Rotation Knob ---
   const highlightBox = document.createElement('div');
   highlightBox.className = 'box-highlight';
   highlightBox.innerHTML = \`
     <div class="handle-rotate-stem"></div>
-    <div class="handle-rotate" id="flimsy-rotate-handle" title="Drag to rotate (Shift for 15 deg steps)"></div>
+    <div class="handle-rotate" id="flimsy-rotate-handle" title="Drag to rotate (Shift for 15 deg)"></div>
     <div class="handle handle-tl" data-handle="tl"></div>
     <div class="handle handle-tc" data-handle="tc"></div>
     <div class="handle handle-tr" data-handle="tr"></div>
@@ -1629,7 +1722,7 @@ export const clientScript = `
   const dimPillSpan = highlightBox.querySelector('.dim-pill');
   const rotateHandle = highlightBox.querySelector('#flimsy-rotate-handle');
 
-  // --- Left Floating Full Layers Tree Panel ---
+  // --- Left Floating Layers Tree Panel ---
   const layersPanel = document.createElement('div');
   layersPanel.className = 'glass-card layers-panel no-scroll';
   layersPanel.id = 'flimsy-layers-panel';
@@ -1637,12 +1730,8 @@ export const clientScript = `
     <div class="layers-header">
       <span>Layers</span>
       <div class="layers-header-actions">
-        <button class="icon-btn" id="flimsy-layers-refresh" title="Refresh Tree">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
-        </button>
-        <button class="icon-btn" id="flimsy-layers-close" title="Hide Layers">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-        </button>
+        <button class="icon-btn" id="flimsy-layers-refresh" title="Refresh Tree" aria-label="Refresh Layers">\${ICONS.refresh}</button>
+        <button class="icon-btn" id="flimsy-layers-close" title="Hide Layers" aria-label="Hide Layers">\${ICONS.close}</button>
       </div>
     </div>
     <div class="trail" id="flimsy-trail"></div>
@@ -1653,43 +1742,45 @@ export const clientScript = `
   const layersCloseBtn = layersPanel.querySelector('#flimsy-layers-close');
   const layersRefreshBtn = layersPanel.querySelector('#flimsy-layers-refresh');
 
-  // --- Right Floating Inspector Card ---
+  // --- Right Floating Streamlined Inspector Card ---
   const panel = document.createElement('div');
   panel.className = 'glass-card studio-panel no-scroll';
   panel.innerHTML = \`
     <div class="studio-header">
       <div class="studio-header-left">
-        <span class="studio-tag-badge" id="flimsy-elem-tag">&lt;button&gt;</span>
+        <span class="studio-tag-badge" id="flimsy-elem-tag">&lt;div&gt;</span>
         <span class="studio-loc-badge" id="flimsy-elem-loc">Hero.tsx:16</span>
         <span class="instance-badge" id="flimsy-instance-badge"></span>
       </div>
-      <button class="icon-btn" id="flimsy-close-btn" title="Close (Esc)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-      </button>
+      <button class="icon-btn" id="flimsy-close-btn" title="Close (Esc)" aria-label="Close Inspector">\${ICONS.close}</button>
     </div>
 
-    <!-- Text Section -->
+    <!-- Inline Text Content -->
     <div class="prop-section" id="flimsy-text-group">
-      <div class="prop-row-inline">
-        <span class="prop-label">Text</span>
-        <input type="text" id="flimsy-text-input" class="clean-input" placeholder="Double-click on page to edit...">
+      <div class="field-box" style="padding: 0 8px;">
+        <span class="field-k">Text</span>
+        <input type="text" id="flimsy-text-input" class="field-input" style="text-align:left; font-family:Inter, sans-serif;" placeholder="Double-click to edit...">
       </div>
     </div>
 
-    <!-- Auto Layout Section -->
+    <!-- Layout & Dimensions -->
     <div class="prop-section">
       <div class="prop-row-inline">
-        <span class="prop-label">Auto Layout</span>
-        <div class="segmented" id="seg-flex-dir" style="width: 172px;">
-          <button class="seg-btn" data-class="flex" title="Enable Flex">Flex</button>
-          <button class="seg-btn" data-class="flex-row" data-auto-flex="1">Row</button>
-          <button class="seg-btn" data-class="flex-col" data-auto-flex="1">Col</button>
-          <button class="seg-btn" data-class="flex-wrap" data-auto-flex="1">Wrap</button>
+        <span class="prop-label">Layout</span>
+        <div class="segmented" id="seg-flex-dir" style="width: 148px;">
+          <button class="seg-btn" data-class="flex" title="Flex">Flex</button>
+          <button class="seg-btn" data-class="flex-row" data-auto-flex="1" title="Horizontal">\${ICONS.flowRow}</button>
+          <button class="seg-btn" data-class="flex-col" data-auto-flex="1" title="Vertical">\${ICONS.flowCol}</button>
+          <button class="seg-btn" data-class="flex-wrap" data-auto-flex="1" title="Wrap">\${ICONS.flowWrap}</button>
         </div>
       </div>
 
-      <div style="display:flex; gap:8px; align-items:center; margin-top:2px;">
-        <!-- 3x3 Alignment Matrix -->
+      <div class="grid-2">
+        <div class="field-box"><span class="field-k">W</span><input type="text" id="flimsy-width-input" class="field-input" placeholder="auto" title="Width (px, full, fit, auto)"></div>
+        <div class="field-box"><span class="field-k">H</span><input type="text" id="flimsy-height-input" class="field-input" placeholder="auto" title="Height (px, full, fit, auto)"></div>
+      </div>
+
+      <div style="display:flex; gap:8px; align-items:stretch;">
         <div class="align-grid" id="flimsy-align-grid">
           <div class="align-cell" data-align="items-start justify-start" title="Top Left"></div>
           <div class="align-cell" data-align="items-start justify-center" title="Top Center"></div>
@@ -1701,319 +1792,272 @@ export const clientScript = `
           <div class="align-cell" data-align="items-end justify-center" title="Bottom Center"></div>
           <div class="align-cell" data-align="items-end justify-end" title="Bottom Right"></div>
         </div>
-
-        <div style="flex:1; display:flex; flex-direction:column; gap:5px; min-width:0;">
-          <!-- Gap presets + numeric input -->
-          <div class="prop-row-inline" style="gap:5px;">
-            <span class="prop-label" style="font-size:9.5px;">Gap</span>
-            <div class="segmented" id="seg-gap" style="flex:1;">
-              <button class="seg-btn" data-class="gap-0">0</button>
-              <button class="seg-btn" data-class="gap-2">2</button>
-              <button class="seg-btn" data-class="gap-4">4</button>
-              <button class="seg-btn" data-class="gap-6">6</button>
-            </div>
-            <input type="text" id="flimsy-gap-input" class="side-input" style="width:42px;" placeholder="px" title="Exact gap (e.g. 18px or 5)">
+        <div style="flex:1; display:flex; flex-direction:column; justify-content:space-between; gap:5px; min-width:0;">
+          <div class="field-box">
+            <span class="field-k">Gap</span>
+            <input type="text" id="flimsy-gap-input" class="field-input" placeholder="0px" title="Flex/Grid gap (e.g. 16px or 4)">
           </div>
-          <!-- Justify distribution -->
-          <div class="prop-row-inline" style="gap:5px;">
-            <span class="prop-label" style="font-size:9.5px;">Dist</span>
-            <div class="segmented" id="seg-justify" style="flex:1;">
-              <button class="seg-btn" data-class="justify-start" data-auto-flex="1">Start</button>
-              <button class="seg-btn" data-class="justify-center" data-auto-flex="1">Ctr</button>
-              <button class="seg-btn" data-class="justify-between" data-auto-flex="1">Betw</button>
-              <button class="seg-btn" data-class="justify-end" data-auto-flex="1">End</button>
-            </div>
-          </div>
-          <!-- Sizing constraints -->
-          <div class="prop-row-inline" style="gap:5px;">
-            <span class="prop-label" style="font-size:9.5px;">Size</span>
-            <div class="segmented" id="seg-sizing" style="flex:1;">
-              <button class="seg-btn" data-class="w-fit">Hug</button>
-              <button class="seg-btn" data-class="w-full">Fill</button>
-              <button class="seg-btn" data-class="w-auto">Auto</button>
-            </div>
+          <div class="field-box">
+            <span class="field-k">Pad</span>
+            <input type="text" id="flimsy-pad-input" class="field-input" placeholder="0px" title="Padding (e.g. 24px or 6)">
+            <button class="mini-toggle-btn" id="flimsy-pad-link-btn" title="Per-side padding">\${ICONS.sides}</button>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- Appearance: Element Opacity & Rotation -->
-    <div class="prop-section">
-      <span class="prop-label">Appearance</span>
-      <div class="prop-row-inline" style="gap:6px;">
-        <span class="prop-label" style="font-size:9.5px; width:44px;">Opacity</span>
-        <input type="range" min="0" max="100" step="5" value="100" class="mini-slider" id="flimsy-opacity-slider">
-        <span id="flimsy-opacity-val" style="font-size:10px; font-family:monospace; color:var(--ink-secondary); width:32px; text-align:right;">100%</span>
-      </div>
-      <div class="prop-row-inline" style="gap:6px;">
-        <span class="prop-label" style="font-size:9.5px; width:44px;">Rotate</span>
-        <div class="segmented" id="seg-rotate" style="flex:1;">
-          <button class="seg-btn" data-class="rotate-0">0</button>
-          <button class="seg-btn" data-class="rotate-6">6</button>
-          <button class="seg-btn" data-class="rotate-12">12</button>
-          <button class="seg-btn" data-class="rotate-45">45</button>
-          <button class="seg-btn" data-class="-rotate-6">-6</button>
-        </div>
-        <input type="text" id="flimsy-rotate-input" class="side-input" style="width:44px;" placeholder="0deg" title="Rotation in degrees">
-      </div>
-    </div>
-
-    <!-- Spacing & Per-Side Padding -->
-    <div class="prop-section">
-      <div class="prop-row-inline">
-        <span class="prop-label">Padding</span>
-        <button class="pill-toggle" id="flimsy-pad-link-btn" style="padding: 2px 6px; font-size:9.5px;">Linked</button>
-      </div>
       <div class="side-box-grid" id="flimsy-pad-grid" style="display:none;">
         <div class="side-input-wrap"><span class="side-tag">T</span><input type="text" class="side-input" id="pad-top" placeholder="0"></div>
         <div class="side-input-wrap"><span class="side-tag">R</span><input type="text" class="side-input" id="pad-right" placeholder="0"></div>
         <div class="side-input-wrap"><span class="side-tag">B</span><input type="text" class="side-input" id="pad-bottom" placeholder="0"></div>
         <div class="side-input-wrap"><span class="side-tag">L</span><input type="text" class="side-input" id="pad-left" placeholder="0"></div>
       </div>
-      <div class="segmented" id="seg-padding">
-        <button class="seg-btn" data-class="p-0">p-0</button>
-        <button class="seg-btn" data-class="p-2">p-2</button>
-        <button class="seg-btn" data-class="p-4">p-4</button>
-        <button class="seg-btn" data-class="p-6">p-6</button>
-        <button class="seg-btn" data-class="p-8">p-8</button>
-      </div>
-    </div>
 
-    <!-- Color System: 2D Spectrum & Document Colors Modal Trigger -->
-    <div class="prop-section">
-      <div class="prop-row-inline">
-        <span class="prop-label">Color & Fill</span>
-        <div class="segmented" id="seg-color-target" style="width: 140px;">
-          <button class="seg-btn active" id="flimsy-target-fill">Fill</button>
-          <button class="seg-btn" id="flimsy-target-text">Text</button>
-          <button class="seg-btn" id="flimsy-target-stroke">Stroke</button>
+      <div class="grid-2">
+        <div class="segmented" id="seg-justify">
+          <button class="seg-btn" data-class="justify-start" data-auto-flex="1" title="Start">S</button>
+          <button class="seg-btn" data-class="justify-center" data-auto-flex="1" title="Center">C</button>
+          <button class="seg-btn" data-class="justify-between" data-auto-flex="1" title="Between">B</button>
+          <button class="seg-btn" data-class="justify-end" data-auto-flex="1" title="End">E</button>
         </div>
-      </div>
-
-      <div class="color-preview-trigger" id="flimsy-color-trigger" title="Open 2D Color Spectrum">
-        <div class="color-preview-thumb" id="flimsy-color-thumb"></div>
-        <span class="color-preview-hex" id="flimsy-color-hex-label">#D9B25F</span>
-        <span style="font-size:10px; color:var(--ink-muted); font-family:monospace;" id="flimsy-color-opacity-label">100%</span>
-        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
-      </div>
-    </div>
-
-    <!-- Typography & Advanced Controls -->
-    <div class="prop-section">
-      <div class="prop-row-inline">
-        <span class="prop-label">Typography</span>
-        <button class="font-select-trigger" id="flimsy-font-trigger" style="width:148px;">
-          <span id="flimsy-current-font-name">Inter</span>
-          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
-        </button>
-      </div>
-
-      <div class="segmented" id="seg-font-size">
-        <button class="seg-btn" data-class="text-xs">xs</button>
-        <button class="seg-btn" data-class="text-sm">sm</button>
-        <button class="seg-btn" data-class="text-base">md</button>
-        <button class="seg-btn" data-class="text-lg">lg</button>
-        <button class="seg-btn" data-class="text-xl">xl</button>
-        <button class="seg-btn" data-class="text-2xl">2xl</button>
-      </div>
-      <div class="segmented" id="seg-font-weight">
-        <button class="seg-btn" data-class="font-normal">Reg</button>
-        <button class="seg-btn" data-class="font-medium">Med</button>
-        <button class="seg-btn" data-class="font-semibold">Semi</button>
-        <button class="seg-btn" data-class="font-bold">Bold</button>
-      </div>
-      <div class="prop-row-inline" style="gap:5px;">
-        <div class="segmented" id="seg-text-align" style="flex:1;">
-          <button class="seg-btn" data-class="text-left" title="Align Left">L</button>
-          <button class="seg-btn" data-class="text-center" title="Align Center">C</button>
-          <button class="seg-btn" data-class="text-right" title="Align Right">R</button>
-          <button class="seg-btn" data-class="text-justify" title="Align Justify">J</button>
-        </div>
-        <div class="segmented" id="seg-text-transform" style="flex:1;">
-          <button class="seg-btn" data-class="normal-case" title="Normal Case">Aa</button>
-          <button class="seg-btn" data-class="uppercase" title="Uppercase">AA</button>
-          <button class="seg-btn" data-class="lowercase" title="Lowercase">aa</button>
-          <button class="seg-btn" data-class="capitalize" title="Capitalize">Ab</button>
-        </div>
-      </div>
-      <div class="prop-row-inline" style="gap:5px;">
-        <span class="prop-label" style="font-size:9.5px; width:36px;">Lead</span>
-        <div class="segmented" id="seg-leading" style="flex:1;">
-          <button class="seg-btn" data-class="leading-none">None</button>
-          <button class="seg-btn" data-class="leading-tight">Tight</button>
-          <button class="seg-btn" data-class="leading-normal">Norm</button>
-          <button class="seg-btn" data-class="leading-relaxed">Relx</button>
-          <button class="seg-btn" data-class="leading-loose">Loose</button>
-        </div>
-      </div>
-      <div class="prop-row-inline" style="gap:5px;">
-        <span class="prop-label" style="font-size:9.5px; width:36px;">Track</span>
-        <div class="segmented" id="seg-tracking" style="flex:1;">
-          <button class="seg-btn" data-class="tracking-tighter">--</button>
-          <button class="seg-btn" data-class="tracking-tight">-</button>
-          <button class="seg-btn" data-class="tracking-normal">0</button>
-          <button class="seg-btn" data-class="tracking-wide">+</button>
-          <button class="seg-btn" data-class="tracking-widest">++</button>
+        <div class="segmented" id="seg-sizing">
+          <button class="seg-btn" data-class="w-fit" title="Hug content">Hug</button>
+          <button class="seg-btn" data-class="w-full" title="Fill width">Fill</button>
+          <button class="seg-btn" data-class="w-auto" title="Auto">Auto</button>
         </div>
       </div>
     </div>
 
-    <!-- Borders & Independent Radii & Per-Side Borders -->
+    <!-- Appearance -->
     <div class="prop-section">
       <div class="prop-row-inline">
-        <span class="prop-label">Corners & Border</span>
-        <div style="display:flex; gap:4px;">
-          <button class="pill-toggle" id="flimsy-radius-link-btn" style="padding: 2px 6px; font-size:9.5px;">Corners</button>
-          <button class="pill-toggle" id="flimsy-border-side-btn" style="padding: 2px 6px; font-size:9.5px;">Sides</button>
+        <span class="prop-label">Appearance</span>
+        <span class="prop-sub" id="flimsy-opacity-val" style="font-family:ui-monospace,monospace;">100%</span>
+      </div>
+      <div class="grid-2">
+        <div class="field-box">
+          <span class="field-k">Rad</span>
+          <input type="text" id="flimsy-radius-input" class="field-input" placeholder="0px" title="Corner radius (e.g. 12px, lg, full)">
+          <button class="mini-toggle-btn" id="flimsy-radius-link-btn" title="Independent corners">\${ICONS.corners}</button>
+        </div>
+        <div class="field-box">
+          <span class="field-k">Rot</span>
+          <input type="text" id="flimsy-rotate-input" class="field-input" placeholder="0deg" title="Rotation in degrees">
         </div>
       </div>
-
       <div class="side-box-grid" id="flimsy-radius-grid" style="display:none;">
         <div class="side-input-wrap"><span class="side-tag">TL</span><input type="text" class="side-input" id="rad-tl" placeholder="0"></div>
         <div class="side-input-wrap"><span class="side-tag">TR</span><input type="text" class="side-input" id="rad-tr" placeholder="0"></div>
         <div class="side-input-wrap"><span class="side-tag">BR</span><input type="text" class="side-input" id="rad-br" placeholder="0"></div>
         <div class="side-input-wrap"><span class="side-tag">BL</span><input type="text" class="side-input" id="rad-bl" placeholder="0"></div>
       </div>
-
-      <div class="side-box-grid" id="flimsy-border-side-grid" style="display:none;">
-        <div class="side-input-wrap"><span class="side-tag">BT</span><input type="text" class="side-input" id="bdr-t" placeholder="0"></div>
-        <div class="side-input-wrap"><span class="side-tag">BR</span><input type="text" class="side-input" id="bdr-r" placeholder="0"></div>
-        <div class="side-input-wrap"><span class="side-tag">BB</span><input type="text" class="side-input" id="bdr-b" placeholder="0"></div>
-        <div class="side-input-wrap"><span class="side-tag">BL</span><input type="text" class="side-input" id="bdr-l" placeholder="0"></div>
+      <div class="prop-row-inline" style="gap:8px;">
+        <span class="prop-sub" style="width:42px;">Opacity</span>
+        <input type="range" min="0" max="100" step="5" value="100" class="mini-slider" id="flimsy-opacity-slider" aria-label="Opacity">
       </div>
+    </div>
 
-      <div class="segmented" id="seg-radius">
-        <button class="seg-btn" data-class="rounded-none">0</button>
-        <button class="seg-btn" data-class="rounded-sm">sm</button>
-        <button class="seg-btn" data-class="rounded-md">md</button>
-        <button class="seg-btn" data-class="rounded-lg">lg</button>
-        <button class="seg-btn" data-class="rounded-xl">xl</button>
-        <button class="seg-btn" data-class="rounded-full">Full</button>
-      </div>
-
-      <div style="display:flex; gap:6px; align-items:center;">
-        <div class="segmented" id="seg-border-width" style="flex:1;">
-          <button class="seg-btn" data-class="border-0">0px</button>
-          <button class="seg-btn" data-class="border">1px</button>
-          <button class="seg-btn" data-class="border-2">2px</button>
-          <button class="seg-btn" data-class="border-4">4px</button>
+    <!-- Fill -->
+    <div class="prop-section">
+      <div class="prop-row-inline">
+        <span class="prop-label">Fill</span>
+        <div class="segmented" id="seg-color-target" style="width: 132px;">
+          <button class="seg-btn active" id="flimsy-target-fill">Fill</button>
+          <button class="seg-btn" id="flimsy-target-text">Text</button>
+          <button class="seg-btn" id="flimsy-target-stroke">Stroke</button>
         </div>
-        <div class="segmented" id="seg-border-style" style="width:110px;">
-          <button class="seg-btn" data-class="border-solid">Solid</button>
-          <button class="seg-btn" data-class="border-dashed">Dash</button>
-          <button class="seg-btn" data-class="border-dotted">Dot</button>
+      </div>
+      <div class="color-preview-trigger" id="flimsy-color-trigger" title="Open 2D Color Spectrum">
+        <div class="color-preview-thumb" id="flimsy-color-thumb"></div>
+        <span class="color-preview-hex" id="flimsy-color-hex-label">#1E293B</span>
+        <span style="font-size:10px; color:var(--ink-muted); font-family:ui-monospace,monospace;" id="flimsy-color-opacity-label">100%</span>
+        <span style="display:inline-flex; color:var(--ink-muted); width:12px; height:12px;">\${ICONS.chevronDown}</span>
+      </div>
+    </div>
+
+    <!-- Typography -->
+    <div class="prop-section">
+      <span class="prop-label">Typography</span>
+      <button class="font-select-trigger" id="flimsy-font-trigger">
+        <span id="flimsy-current-font-name">Inter</span>
+        <span style="display:inline-flex; color:var(--ink-muted); width:12px; height:12px;">\${ICONS.chevronDown}</span>
+      </button>
+      <div class="grid-2">
+        <select class="field-select" id="flimsy-weight-select" aria-label="Font Weight">
+          <option value="font-light">Light</option>
+          <option value="font-normal" selected>Regular</option>
+          <option value="font-medium">Medium</option>
+          <option value="font-semibold">Semibold</option>
+          <option value="font-bold">Bold</option>
+          <option value="font-extrabold">Extrabold</option>
+        </select>
+        <div class="field-box">
+          <span class="field-k">Size</span>
+          <input type="text" id="flimsy-size-input" class="field-input" placeholder="16px" title="Font size (e.g. 16px, lg, 2xl)">
+        </div>
+      </div>
+      <div class="grid-2">
+        <select class="field-select" id="seg-leading" aria-label="Line Height">
+          <option value="leading-none">Line 1.0</option>
+          <option value="leading-tight">Line 1.25</option>
+          <option value="leading-snug">Line 1.37</option>
+          <option value="leading-normal" selected>Line 1.5</option>
+          <option value="leading-relaxed">Line 1.62</option>
+          <option value="leading-loose">Line 2.0</option>
+        </select>
+        <select class="field-select" id="seg-tracking" aria-label="Letter Spacing">
+          <option value="tracking-tighter">Track -5%</option>
+          <option value="tracking-tight">Track -2%</option>
+          <option value="tracking-normal" selected>Track 0%</option>
+          <option value="tracking-wide">Track +2%</option>
+          <option value="tracking-wider">Track +5%</option>
+          <option value="tracking-widest">Track +10%</option>
+        </select>
+      </div>
+      <div style="display:flex; gap:5px;">
+        <div class="segmented" id="seg-text-align" style="flex:1.15;">
+          <button class="seg-btn" data-class="text-left" title="Align Left">\${ICONS.alignL}</button>
+          <button class="seg-btn" data-class="text-center" title="Align Center">\${ICONS.alignC}</button>
+          <button class="seg-btn" data-class="text-right" title="Align Right">\${ICONS.alignR}</button>
+          <button class="seg-btn" data-class="text-justify" title="Justify">\${ICONS.alignJ}</button>
+        </div>
+        <div class="segmented" id="seg-text-transform" style="flex:0.85;">
+          <button class="seg-btn" data-class="normal-case" title="Normal">Aa</button>
+          <button class="seg-btn" data-class="uppercase" title="Uppercase">AA</button>
+          <button class="seg-btn" data-class="capitalize" title="Capitalize">Ab</button>
         </div>
       </div>
     </div>
 
-    <!-- Effects: Shadow, Backdrop Blur, Layer Blur -->
+    <!-- Collapsible Stroke & Border Accordion -->
     <div class="prop-section">
-      <span class="prop-label">Effects</span>
-      <div class="segmented" id="seg-shadow">
-        <button class="seg-btn" data-class="shadow-none">None</button>
-        <button class="seg-btn" data-class="shadow-sm">sm</button>
-        <button class="seg-btn" data-class="shadow-md">md</button>
-        <button class="seg-btn" data-class="shadow-lg">lg</button>
-        <button class="seg-btn" data-class="shadow-xl">xl</button>
-        <button class="seg-btn" data-class="shadow-inner">In</button>
+      <div class="accordion-header" id="flimsy-border-accordion-btn">
+        <span class="prop-label">Stroke &amp; Border</span>
+        <button class="accordion-plus" id="flimsy-border-accordion-icon" type="button" aria-label="Toggle Stroke & Border">\${ICONS.plus}</button>
       </div>
-      <div class="segmented" id="seg-blur">
-        <button class="seg-btn" data-class="backdrop-blur-none">BG 0</button>
-        <button class="seg-btn" data-class="backdrop-blur-sm">BG sm</button>
-        <button class="seg-btn" data-class="backdrop-blur-md">BG md</button>
-        <button class="seg-btn" data-class="backdrop-blur-lg">BG lg</button>
+      <div class="accordion-body" id="flimsy-border-body">
+        <div style="display:flex; gap:5px; align-items:center;">
+          <div class="segmented" id="seg-border-width" style="flex:1;">
+            <button class="seg-btn" data-class="border-0">0</button>
+            <button class="seg-btn" data-class="border">1</button>
+            <button class="seg-btn" data-class="border-2">2</button>
+            <button class="seg-btn" data-class="border-4">4</button>
+          </div>
+          <div class="segmented" id="seg-border-style" style="width:94px;">
+            <button class="seg-btn" data-class="border-solid">Sol</button>
+            <button class="seg-btn" data-class="border-dashed">Dsh</button>
+            <button class="seg-btn" data-class="border-dotted">Dot</button>
+          </div>
+          <button class="mini-toggle-btn" id="flimsy-border-side-btn" title="Individual border sides">\${ICONS.sides}</button>
+        </div>
+        <div class="side-box-grid" id="flimsy-border-side-grid" style="display:none;">
+          <div class="side-input-wrap"><span class="side-tag">BT</span><input type="text" class="side-input" id="bdr-t" placeholder="0"></div>
+          <div class="side-input-wrap"><span class="side-tag">BR</span><input type="text" class="side-input" id="bdr-r" placeholder="0"></div>
+          <div class="side-input-wrap"><span class="side-tag">BB</span><input type="text" class="side-input" id="bdr-b" placeholder="0"></div>
+          <div class="side-input-wrap"><span class="side-tag">BL</span><input type="text" class="side-input" id="bdr-l" placeholder="0"></div>
+        </div>
       </div>
-      <div class="segmented" id="seg-layer-blur">
-        <button class="seg-btn" data-class="blur-none">Blur 0</button>
-        <button class="seg-btn" data-class="blur-sm">sm</button>
-        <button class="seg-btn" data-class="blur-md">md</button>
-        <button class="seg-btn" data-class="blur-lg">lg</button>
+    </div>
+
+    <!-- Collapsible Effects Accordion -->
+    <div class="prop-section">
+      <div class="accordion-header" id="flimsy-effects-accordion-btn">
+        <span class="prop-label">Effects</span>
+        <button class="accordion-plus" id="flimsy-effects-accordion-icon" type="button" aria-label="Toggle Effects">\${ICONS.plus}</button>
+      </div>
+      <div class="accordion-body" id="flimsy-effects-body">
+        <div class="segmented" id="seg-shadow">
+          <button class="seg-btn" data-class="shadow-none">None</button>
+          <button class="seg-btn" data-class="shadow-sm">sm</button>
+          <button class="seg-btn" data-class="shadow-md">md</button>
+          <button class="seg-btn" data-class="shadow-lg">lg</button>
+          <button class="seg-btn" data-class="shadow-xl">xl</button>
+          <button class="seg-btn" data-class="shadow-inner">In</button>
+        </div>
+        <div class="segmented" id="seg-blur">
+          <button class="seg-btn" data-class="backdrop-blur-none">BG 0</button>
+          <button class="seg-btn" data-class="backdrop-blur-sm">sm</button>
+          <button class="seg-btn" data-class="backdrop-blur-md">md</button>
+          <button class="seg-btn" data-class="backdrop-blur-lg">lg</button>
+        </div>
+        <div class="segmented" id="seg-layer-blur">
+          <button class="seg-btn" data-class="blur-none">Blur 0</button>
+          <button class="seg-btn" data-class="blur-sm">sm</button>
+          <button class="seg-btn" data-class="blur-md">md</button>
+          <button class="seg-btn" data-class="blur-lg">lg</button>
+        </div>
       </div>
     </div>
 
     <!-- Drawers: AI Assist & Raw Classes -->
     <div class="prop-section no-divider">
       <div class="drawer-pills">
-        <button class="pill-toggle" id="flimsy-ai-toggle">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg>
-          AI Assist
-        </button>
+        <button class="pill-toggle" id="flimsy-ai-toggle">\${ICONS.ai} AI</button>
         <button class="pill-toggle" id="flimsy-classes-toggle">Classes</button>
       </div>
 
       <div id="flimsy-ai-drawer" class="ai-drawer">
-        <input type="text" id="flimsy-ai-input" class="clean-input" placeholder="e.g. Glassmorphism card, Neon glow...">
+        <input type="text" id="flimsy-ai-input" class="clean-input" placeholder="e.g. Glass card, soft shadow...">
         <div style="display:flex; gap:4px; flex-wrap:wrap;">
           <button class="ai-chip" data-prompt="Glassmorphism card with blur">Glass</button>
           <button class="ai-chip" data-prompt="Vibrant gradient background">Gradient</button>
           <button class="ai-chip" data-prompt="Neon glow shadow">Glow</button>
           <button class="ai-chip" data-prompt="Modern rounded card with shadow">Card</button>
         </div>
-        <div style="display:flex; gap:5px; margin-top:2px;">
-          <button id="flimsy-ai-generate" class="action-btn" style="flex:1;">Apply AI Style</button>
-          <button id="flimsy-ai-copy" class="pill-toggle" title="Copy prompt for Claude Code or Cursor">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            Copy
-          </button>
+        <div style="display:flex; gap:5px;">
+          <button id="flimsy-ai-generate" class="action-btn" style="flex:1;">Apply</button>
+          <button id="flimsy-ai-copy" class="pill-toggle" title="Copy prompt">\${ICONS.copy} Copy</button>
         </div>
-        <div id="flimsy-ai-feedback" style="font-size:10px; color:#7c5910; display:none;"></div>
+        <div id="flimsy-ai-feedback" style="font-size:10px; color:var(--ink-secondary); display:none;"></div>
       </div>
 
       <div id="flimsy-classes-drawer" style="display:none;">
-        <input type="text" id="flimsy-classes-raw" class="clean-input" placeholder="Tailwind classes...">
+        <input type="text" id="flimsy-classes-raw" class="clean-input" style="font-family:ui-monospace,monospace;" placeholder="Tailwind classes...">
       </div>
     </div>
 
-    <!-- Diff & Sync -->
+    <!-- Diff & Sync Footer -->
     <div id="flimsy-diff-box" class="diff-container no-scroll"></div>
-
     <div class="sync-row">
       <button id="flimsy-sync-btn" class="sync-btn" title="Sync to Code (Shift+S)">In Sync</button>
-      <button id="flimsy-discard-btn" class="discard-btn" title="Discard pending changes">Reset</button>
+      <button id="flimsy-discard-btn" class="discard-btn" title="Reset changes">Reset</button>
     </div>
     <div id="flimsy-sync-status" class="sync-status"></div>
   \`;
   shadow.appendChild(panel);
 
-  // --- Figma 2D Spectrum Color Popover Modal ---
+  // --- Floating 2D Spectrum Color Picker Modal ---
   const colorModal = document.createElement('div');
   colorModal.className = 'figma-color-modal';
   colorModal.innerHTML = \`
     <div style="display:flex; justify-content:space-between; align-items:center;">
-      <span style="font-size:11px; font-weight:600; color:var(--ink-secondary);">Color Picker</span>
-      <button class="icon-btn" id="flimsy-color-close" style="width:18px; height:18px;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-      </button>
+      <span style="font-size:11px; font-weight:600; color:var(--ink-primary);">Color</span>
+      <button class="icon-btn" id="flimsy-color-close" style="width:18px; height:18px;" aria-label="Close Color Picker">\${ICONS.close}</button>
     </div>
     <div class="color-canvas-wrap" id="flimsy-canvas-wrap">
       <canvas class="color-canvas" id="flimsy-color-canvas" width="220" height="130"></canvas>
       <div class="canvas-thumb" id="flimsy-canvas-thumb"></div>
     </div>
-    <input type="range" min="0" max="360" value="42" class="hue-slider" id="flimsy-hue-slider">
-    <input type="range" min="5" max="100" value="100" class="alpha-slider" id="flimsy-alpha-slider">
+    <input type="range" min="0" max="360" value="217" class="hue-slider" id="flimsy-hue-slider" aria-label="Hue">
+    <input type="range" min="5" max="100" value="100" class="alpha-slider" id="flimsy-alpha-slider" aria-label="Alpha">
     <div style="display:flex; gap:6px; align-items:center;">
-      <button class="icon-btn" id="flimsy-eyedropper-btn" title="Eyedropper tool">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m14 7 3 3"/><path d="m17 4 3 3-10 10H7v-3L17 4z"/></svg>
-      </button>
-      <input type="text" id="flimsy-modal-hex" class="clean-input" style="font-family:monospace; text-transform:uppercase;" value="#D9B25F">
-      <span id="flimsy-modal-alpha-text" style="font-size:10px; font-family:monospace; color:var(--ink-secondary); width:32px;">100%</span>
+      <button class="icon-btn" id="flimsy-eyedropper-btn" title="Eyedropper" aria-label="Eyedropper">\${ICONS.eyedropper}</button>
+      <input type="text" id="flimsy-modal-hex" class="clean-input" style="font-family:ui-monospace,monospace; text-transform:uppercase;" value="#1E293B">
+      <span id="flimsy-modal-alpha-text" style="font-size:10px; font-family:ui-monospace,monospace; color:var(--ink-secondary); width:32px; text-align:right;">100%</span>
     </div>
-    <div style="border-top:1px solid var(--glass-hairline); padding-top:6px;">
+    <div style="border-top:1px solid var(--hairline); padding-top:6px;">
       <span style="font-size:9.5px; font-weight:600; color:var(--ink-muted); margin-bottom:4px; display:block;">On this page</span>
       <div class="doc-colors-grid" id="flimsy-doc-colors"></div>
     </div>
   \`;
   shadow.appendChild(colorModal);
 
-  // --- Searchable Typography Font Dropdown Modal ---
+  // --- Searchable Typography Font Modal ---
   const fontModal = document.createElement('div');
   fontModal.className = 'font-modal no-scroll';
   fontModal.innerHTML = \`
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
-      <span style="font-size:11px; font-weight:600; color:var(--ink-secondary);">Fonts</span>
-      <button class="icon-btn" id="flimsy-font-close" style="width:18px; height:18px;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-      </button>
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <span style="font-size:11px; font-weight:600; color:var(--ink-primary);">Fonts</span>
+      <button class="icon-btn" id="flimsy-font-close" style="width:18px; height:18px;" aria-label="Close Fonts">\${ICONS.close}</button>
     </div>
     <input type="text" class="clean-input" id="flimsy-font-search" placeholder="Search fonts...">
     <div class="font-list-scroll no-scroll" id="flimsy-font-list"></div>
@@ -2024,6 +2068,7 @@ export const clientScript = `
   const elemTagDisplay = panel.querySelector('#flimsy-elem-tag');
   const elemLocDisplay = panel.querySelector('#flimsy-elem-loc');
   const instanceBadge = panel.querySelector('#flimsy-instance-badge');
+  const textGroup = panel.querySelector('#flimsy-text-group');
   const textInput = panel.querySelector('#flimsy-text-input');
   const classesRawInput = panel.querySelector('#flimsy-classes-raw');
   const classesToggle = panel.querySelector('#flimsy-classes-toggle');
@@ -2034,10 +2079,25 @@ export const clientScript = `
   const syncStatus = panel.querySelector('#flimsy-sync-status');
   const closeBtn = panel.querySelector('#flimsy-close-btn');
 
+  const widthInput = panel.querySelector('#flimsy-width-input');
+  const heightInput = panel.querySelector('#flimsy-height-input');
   const gapInput = panel.querySelector('#flimsy-gap-input');
+  const padInput = panel.querySelector('#flimsy-pad-input');
+  const radiusInput = panel.querySelector('#flimsy-radius-input');
   const opacitySlider = panel.querySelector('#flimsy-opacity-slider');
   const opacityValLabel = panel.querySelector('#flimsy-opacity-val');
   const rotateInput = panel.querySelector('#flimsy-rotate-input');
+  const weightSelect = panel.querySelector('#flimsy-weight-select');
+  const sizeInput = panel.querySelector('#flimsy-size-input');
+  const leadingSelect = panel.querySelector('#seg-leading');
+  const trackingSelect = panel.querySelector('#seg-tracking');
+
+  const borderAccordionBtn = panel.querySelector('#flimsy-border-accordion-btn');
+  const borderAccordionIcon = panel.querySelector('#flimsy-border-accordion-icon');
+  const borderBody = panel.querySelector('#flimsy-border-body');
+  const effectsAccordionBtn = panel.querySelector('#flimsy-effects-accordion-btn');
+  const effectsAccordionIcon = panel.querySelector('#flimsy-effects-accordion-icon');
+  const effectsBody = panel.querySelector('#flimsy-effects-body');
 
   const aiToggle = panel.querySelector('#flimsy-ai-toggle');
   const aiDrawer = panel.querySelector('#flimsy-ai-drawer');
@@ -2079,19 +2139,18 @@ export const clientScript = `
   const borderSideBtn = panel.querySelector('#flimsy-border-side-btn');
   const borderSideGrid = panel.querySelector('#flimsy-border-side-grid');
 
-  // Standard Web Fonts List with previews
   const FONTS = [
-    { name: 'Inter', category: 'Sans-Serif', family: "'Inter', sans-serif" },
-    { name: 'Roboto', category: 'Sans-Serif', family: "'Roboto', sans-serif" },
-    { name: 'Poppins', category: 'Sans-Serif', family: "'Poppins', sans-serif" },
-    { name: 'Montserrat', category: 'Sans-Serif', family: "'Montserrat', sans-serif" },
-    { name: 'Plus Jakarta Sans', category: 'Sans-Serif', family: "'Plus Jakarta Sans', sans-serif" },
-    { name: 'Open Sans', category: 'Sans-Serif', family: "'Open Sans', sans-serif" },
+    { name: 'Inter', category: 'Sans', family: "'Inter', sans-serif" },
+    { name: 'Roboto', category: 'Sans', family: "'Roboto', sans-serif" },
+    { name: 'Poppins', category: 'Sans', family: "'Poppins', sans-serif" },
+    { name: 'Montserrat', category: 'Sans', family: "'Montserrat', sans-serif" },
+    { name: 'Plus Jakarta Sans', category: 'Sans', family: "'Plus Jakarta Sans', sans-serif" },
+    { name: 'Open Sans', category: 'Sans', family: "'Open Sans', sans-serif" },
     { name: 'Playfair Display', category: 'Serif', family: "'Playfair Display', serif" },
     { name: 'Merriweather', category: 'Serif', family: "'Merriweather', serif" },
     { name: 'Inria Serif', category: 'Serif', family: "'Inria Serif', serif" },
-    { name: 'Fira Code', category: 'Monospace', family: "'Fira Code', monospace" },
-    { name: 'JetBrains Mono', category: 'Monospace', family: "'JetBrains Mono', monospace" },
+    { name: 'Fira Code', category: 'Mono', family: "'Fira Code', monospace" },
+    { name: 'JetBrains Mono', category: 'Mono', family: "'JetBrains Mono', monospace" },
     { name: 'System Sans', category: 'System', family: 'system-ui, -apple-system, sans-serif' },
     { name: 'System Serif', category: 'System', family: 'Georgia, Cambria, serif' },
     { name: 'System Mono', category: 'System', family: 'ui-monospace, monospace' },
@@ -2120,6 +2179,21 @@ export const clientScript = `
     const parentComp = parentTaggedEl.getAttribute('data-flimsy-comp');
     return Boolean(parentComp && comp !== parentComp);
   }
+
+  function setAccordionState(which, open) {
+    if (which === 'border') {
+      isBorderSectionOpen = open;
+      borderBody.classList.toggle('open', open);
+      borderAccordionIcon.innerHTML = open ? ICONS.minus : ICONS.plus;
+    } else {
+      isEffectsSectionOpen = open;
+      effectsBody.classList.toggle('open', open);
+      effectsAccordionIcon.innerHTML = open ? ICONS.minus : ICONS.plus;
+    }
+  }
+
+  borderAccordionBtn.addEventListener('click', () => setAccordionState('border', !isBorderSectionOpen));
+  effectsAccordionBtn.addEventListener('click', () => setAccordionState('effects', !isEffectsSectionOpen));
 
   function updateUndoRedoUI() {
     undoBtn.disabled = historyIdx <= 0;
@@ -2188,7 +2262,7 @@ export const clientScript = `
         hasDiff = true;
         const note = document.createElement('div');
         note.className = 'diff-add';
-        note.textContent = '+ ' + extraDirty + ' additional selected element(s) queued';
+        note.textContent = '+ ' + extraDirty + ' more selected';
         diffBox.appendChild(note);
       }
     }
@@ -2196,7 +2270,7 @@ export const clientScript = `
     diffBox.style.display = hasDiff ? 'flex' : 'none';
   }
 
-  // --- Tailwind Class Category Reconciliation (Client-side Mirror of Core Updater) ---
+  // --- Tailwind Class Category Reconciliation ---
   function getClientClassCategory(base) {
     if (/^text-([0-9]?xl|xs|sm|base|lg|(\\[\\d+(?:\\.\\d+)?(px|rem|em)\\]))$/.test(base)) return 'font-size';
     if (/^text-(left|center|right|justify|start|end)$/.test(base)) return 'text-align';
@@ -2348,7 +2422,7 @@ export const clientScript = `
         }
       }
     } else {
-      colorThumb.style.background = 'repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 50% / 8px 8px';
+      colorThumb.style.background = 'repeating-conic-gradient(#d4d4d8 0% 25%, #fff 0% 50%) 50% / 8px 8px';
       colorHexLabel.textContent = 'Transparent';
       colorOpacityLabel.textContent = '0%';
       modalHexInput.value = 'TRANSPARENT';
@@ -2387,12 +2461,10 @@ export const clientScript = `
   }
 
   function updateActiveSegmentedUI(classesStr) {
-    const tokens = (classesStr || '').split(/\\s+/);
+    const tokens = (classesStr || '').split(/\\s+/).filter(Boolean);
     panel.querySelectorAll('.seg-btn').forEach((btn) => {
       const cls = btn.getAttribute('data-class');
-      if (cls) {
-        btn.classList.toggle('active', tokens.includes(cls));
-      }
+      if (cls) btn.classList.toggle('active', tokens.includes(cls));
     });
 
     panel.querySelectorAll('.align-cell').forEach((cell) => {
@@ -2401,14 +2473,41 @@ export const clientScript = `
       cell.classList.toggle('active', isMatch);
     });
 
-    // Sync Font Display
+    if (selectedTarget) {
+      const rect = selectedTarget.getBoundingClientRect();
+      const cs = window.getComputedStyle(selectedTarget);
+      widthInput.value = Math.round(rect.width) + 'px';
+      heightInput.value = Math.round(rect.height) + 'px';
+      sizeInput.value = Math.round(parseFloat(cs.fontSize) || 16) + 'px';
+
+      const radPx = Math.round(parseFloat(cs.borderTopLeftRadius) || 0);
+      radiusInput.value = radPx + 'px';
+
+      const padPx = Math.round(parseFloat(cs.paddingTop) || 0);
+      padInput.value = padPx + 'px';
+
+      const gapVal = parseFloat(cs.gap);
+      gapInput.value = !Number.isNaN(gapVal) ? (Math.round(gapVal) + 'px') : '0px';
+    }
+
+    // Font display
     const fontToken = tokens.find((t) => /^font-(sans|serif|mono|\\[)/.test(t));
     if (fontToken) {
       const found = FONTS.find((f) => fontToken.includes(f.name.replace(/\\s+/g, '_')) || fontToken === 'font-' + f.name.toLowerCase());
       if (found) currentFontName.textContent = found.name;
     }
 
-    // Sync Opacity Slider
+    // Weight, Leading, Tracking selects
+    const weightTok = tokens.find((t) => /^font-(light|normal|medium|semibold|bold|extrabold)$/.test(t));
+    weightSelect.value = weightTok || 'font-normal';
+
+    const leadTok = tokens.find((t) => /^leading-(none|tight|snug|normal|relaxed|loose)$/.test(t));
+    leadingSelect.value = leadTok || 'leading-normal';
+
+    const trackTok = tokens.find((t) => /^tracking-(tighter|tight|normal|wide|wider|widest)$/.test(t));
+    trackingSelect.value = trackTok || 'tracking-normal';
+
+    // Opacity slider
     let opVal = 100;
     const opTok = tokens.find((t) => t.startsWith('opacity-'));
     if (opTok) {
@@ -2418,22 +2517,13 @@ export const clientScript = `
     opacitySlider.value = String(opVal);
     opacityValLabel.textContent = opVal + '%';
 
-    // Sync Rotation Input
+    // Rotation
     const rotDeg = parseRotationDeg(classesStr);
     rotateInput.value = rotDeg ? (rotDeg + 'deg') : '0deg';
-
-    // Sync Gap Input
-    const gapTok = tokens.find((t) => t.startsWith('gap-'));
-    if (gapTok) {
-      const gm = gapTok.match(/^gap-(?:\\[([^\\]]+)\\]|(.+))$/);
-      gapInput.value = gm ? (gm[1] || gm[2]) : '';
-    } else {
-      gapInput.value = '';
-    }
   }
 
   function syncLayersVisibility() {
-    layersToggleBtn.classList.toggle('active', isLayersOpen);
+    layersToggleBtn.classList.toggle('subtle-active', isLayersOpen);
     layersPanel.style.display = (isInspectActive && isLayersOpen) ? 'flex' : 'none';
   }
 
@@ -2472,7 +2562,7 @@ export const clientScript = `
     const nextOpen = typeof force === 'boolean' ? force : isHidden;
     aiDrawer.style.display = nextOpen ? 'flex' : 'none';
     aiToggle.classList.toggle('active', nextOpen);
-    dockAiBtn.classList.toggle('active', nextOpen);
+    dockAiBtn.classList.toggle('subtle-active', nextOpen);
     if (nextOpen) aiInput.focus();
   }
 
@@ -2483,7 +2573,7 @@ export const clientScript = `
 
   snapToggleBtn.addEventListener('click', () => {
     isSnapEnabled = !isSnapEnabled;
-    snapToggleBtn.classList.toggle('active', isSnapEnabled);
+    snapToggleBtn.classList.toggle('subtle-active', isSnapEnabled);
   });
 
   layersToggleBtn.addEventListener('click', () => {
@@ -2496,9 +2586,7 @@ export const clientScript = `
     syncLayersVisibility();
   });
 
-  layersRefreshBtn.addEventListener('click', () => {
-    renderFullLayersTree();
-  });
+  layersRefreshBtn.addEventListener('click', () => renderFullLayersTree());
 
   textToolBtn.addEventListener('click', () => {
     if (!selectedTarget) return;
@@ -2585,7 +2673,6 @@ export const clientScript = `
       return;
     }
 
-    // Disjoint horizontal distance
     if (a.right < b.left) {
       addMeasureSegment(a.right, aMidY, b.left, aMidY, Math.round(b.left - a.right) + 'px');
       if (aMidY < b.top || aMidY > b.bottom) {
@@ -2598,7 +2685,6 @@ export const clientScript = `
       }
     }
 
-    // Disjoint vertical distance
     if (a.bottom < b.top) {
       addMeasureSegment(aMidX, a.bottom, aMidX, b.top, Math.round(b.top - a.bottom) + 'px');
       if (aMidX < b.left || aMidX > b.right) {
@@ -2623,7 +2709,6 @@ export const clientScript = `
 
     const typing = isTypingInField(e);
 
-    // Ctrl+S / Cmd+S always syncs; Shift+S syncs when not typing inside an input
     if (((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) || (!typing && e.shiftKey && !e.ctrlKey && !e.metaKey && (e.key === 's' || e.key === 'S'))) {
       if (isInspectActive && selectedTarget) {
         e.preventDefault();
@@ -2841,29 +2926,25 @@ export const clientScript = `
         if (resizeHandle.includes('t')) newH = Math.max(20, startH - deltaY);
 
         if (isText && isCorner) {
-          // Canva / Figma Text Scale Mode: proportional corner scaling adjusts font-size in real time
           const currentDiag = Math.hypot(newW, newH);
           const scale = currentDiag / initialDiag;
           const currentPx = Math.max(10, Math.min(144, Math.round(initialFontSize * scale)));
           selectedTarget.style.fontSize = currentPx + 'px';
           updateHighlightBox(selectedTarget, true);
           dimPillSpan.textContent = currentPx + 'px';
+          sizeInput.value = currentPx + 'px';
         } else {
-          // Shift+Drag locks aspect ratio on corners
           const lockRatio = isCorner && me.shiftKey;
           if (lockRatio) {
-            if (Math.abs(deltaX) >= Math.abs(deltaY)) {
-              newH = Math.max(20, newW / aspectRatio);
-            } else {
-              newW = Math.max(20, newH * aspectRatio);
-            }
+            if (Math.abs(deltaX) >= Math.abs(deltaY)) newH = Math.max(20, newW / aspectRatio);
+            else newW = Math.max(20, newH * aspectRatio);
           }
           selectedTarget.style.width = Math.round(newW) + 'px';
-          if (!isText || lockRatio) {
-            selectedTarget.style.height = Math.round(newH) + 'px';
-          }
+          if (!isText || lockRatio) selectedTarget.style.height = Math.round(newH) + 'px';
           updateHighlightBox(selectedTarget, true);
           dimPillSpan.textContent = Math.round(newW) + ' x ' + Math.round(newH) + (lockRatio ? ' (ratio)' : '');
+          widthInput.value = Math.round(newW) + 'px';
+          heightInput.value = Math.round(newH) + 'px';
         }
       };
 
@@ -2961,9 +3042,7 @@ export const clientScript = `
       let angle = Math.round((Math.atan2(me.clientY - cy, me.clientX - cx) * 180) / Math.PI + 90);
       if (angle > 180) angle -= 360;
       if (angle < -180) angle += 360;
-      if (me.shiftKey) {
-        angle = Math.round(angle / 15) * 15;
-      }
+      if (me.shiftKey) angle = Math.round(angle / 15) * 15;
       currentDeg = angle;
       selectedTarget.style.transform = 'rotate(' + angle + 'deg)';
       dimPillSpan.textContent = angle + 'deg';
@@ -3000,7 +3079,7 @@ export const clientScript = `
     window.addEventListener('pointerup', onUp);
   });
 
-  // --- Full Recursive Layers Tree with Collapse/Expand, Component Badges, & Re-parenting Drag-Drop ---
+  // --- Full Recursive Layers Tree with Custom Flimsy Badges, Collapse/Expand, & Re-parenting ---
   function getLayerNodeKey(el) {
     return (el.getAttribute('data-flimsy-file') || '') + ':' +
       (el.getAttribute('data-flimsy-line') || '') + ':' +
@@ -3046,22 +3125,22 @@ export const clientScript = `
 
       const row = document.createElement('div');
       row.className = 'trail-item' + (isSelected ? ' active' : '') + (isComp ? ' is-component' : '');
-      row.style.paddingLeft = (4 + depth * 10) + 'px';
+      row.style.paddingLeft = (4 + depth * 11) + 'px';
       row.draggable = true;
 
       const badgeHtml = isComp
-        ? '<span class="type-icon comp-icon" title="React Component"><svg viewBox="0 0 12 12" width="9" height="9" fill="currentColor"><path d="M6 1L11 6L6 11L1 6Z"/></svg></span>'
+        ? '<span class="type-icon comp-icon" title="React Component">' + ICONS.compDiamond + '</span>'
         : (isText
           ? '<span class="type-icon text-icon" title="Text Layer">T</span>'
-          : '<span class="type-icon frame-icon" title="Container Frame">#</span>');
+          : '<span class="type-icon frame-icon" title="Container">' + ICONS.frameBracket + '</span>');
 
       const caretHtml = hasChildren
-        ? '<button class="caret-btn' + (isCollapsed ? ' collapsed' : '') + '" title="Toggle subtree"><svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></button>'
+        ? '<button class="caret-btn' + (isCollapsed ? ' collapsed' : '') + '" title="Toggle subtree">' + ICONS.chevronDown + '</button>'
         : '<span class="caret-spacer"></span>';
 
       const displayLabel = isComp && comp
-        ? comp + ' <span style="opacity:0.65; font-size:10px;">&lt;' + name + '&gt;</span>'
-        : '&lt;' + name + '&gt;';
+        ? comp + '<span class="node-tag-dim">&lt;' + name + '&gt;</span>'
+        : '<span style="font-family:ui-monospace,monospace; font-size:10.5px;">&lt;' + name + '&gt;</span>';
 
       row.innerHTML = \`
         \${caretHtml}
@@ -3070,10 +3149,10 @@ export const clientScript = `
           <span class="node-name">\${displayLabel}</span>
         </div>
         <div class="trail-actions">
-          <button class="trail-btn btn-up" title="Move Up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 15-6-6-6 6"/></svg></button>
-          <button class="trail-btn btn-down" title="Move Down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></button>
-          <button class="trail-btn btn-dup" title="Duplicate (Ctrl+D)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
-          <button class="trail-btn btn-del" title="Delete (Del)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/></svg></button>
+          <button class="trail-btn btn-up" title="Move Up">\${ICONS.up}</button>
+          <button class="trail-btn btn-down" title="Move Down">\${ICONS.down}</button>
+          <button class="trail-btn btn-dup" title="Duplicate (Ctrl+D)">\${ICONS.copy}</button>
+          <button class="trail-btn btn-del" title="Delete (Del)">\${ICONS.trash}</button>
         </div>
       \`;
 
@@ -3087,18 +3166,13 @@ export const clientScript = `
         });
       }
 
-      row.querySelector('.trail-title').addEventListener('click', (e) => {
-        selectElement(el, e.shiftKey);
-      });
+      row.querySelector('.trail-title').addEventListener('click', (e) => selectElement(el, e.shiftKey));
       row.querySelector('.btn-up').addEventListener('click', (e) => { e.stopPropagation(); reorderElement(el, 'up'); });
       row.querySelector('.btn-down').addEventListener('click', (e) => { e.stopPropagation(); reorderElement(el, 'down'); });
       row.querySelector('.btn-dup').addEventListener('click', (e) => { e.stopPropagation(); duplicateSelectedElement(el); });
       row.querySelector('.btn-del').addEventListener('click', (e) => { e.stopPropagation(); deleteSelectedElement(el); });
 
-      // 3-zone Drag & Drop (Before / Nest Inside / After)
-      const clearDropClasses = () => {
-        row.classList.remove('drop-before', 'drop-inside', 'drop-after');
-      };
+      const clearDropClasses = () => row.classList.remove('drop-before', 'drop-inside', 'drop-after');
 
       row.addEventListener('dragstart', (e) => {
         draggedElement = el;
@@ -3117,7 +3191,6 @@ export const clientScript = `
       });
       row.addEventListener('dragover', (e) => {
         if (!draggedElement || draggedElement === el) return;
-        // Block dropping parent into its own descendant
         if (draggedElement.contains(el)) return;
         e.preventDefault();
         clearDropClasses();
@@ -3136,9 +3209,7 @@ export const clientScript = `
           row.classList.add('drop-inside');
         }
       });
-      row.addEventListener('dragleave', () => {
-        clearDropClasses();
-      });
+      row.addEventListener('dragleave', () => clearDropClasses());
       row.addEventListener('drop', (e) => {
         e.preventDefault();
         clearDropClasses();
@@ -3149,7 +3220,6 @@ export const clientScript = `
         if (srcFile && dstFile && srcFile === dstFile) {
           reparentElement(draggedElement, el, activeDropPosition);
         } else {
-          // Cross-component fallback: reorder within source component
           const isAbove = el.compareDocumentPosition(draggedElement) & Node.DOCUMENT_POSITION_FOLLOWING;
           reorderElement(draggedElement, isAbove ? 'up' : 'down');
         }
@@ -3174,7 +3244,7 @@ export const clientScript = `
 
     try {
       syncStatus.style.display = 'block';
-      syncStatus.style.color = '#7c5910';
+      syncStatus.style.color = '#52525b';
       syncStatus.textContent = position === 'inside' ? 'Nesting layer...' : 'Moving layer...';
 
       const res = await fetch('/__flimsy/api/update', {
@@ -3189,7 +3259,8 @@ export const clientScript = `
       });
       const data = await res.json();
       if (data.success) {
-        syncStatus.textContent = 'Hierarchy updated. Hot reloading...';
+        syncStatus.style.color = '#15803d';
+        syncStatus.textContent = 'Hierarchy updated.';
         setTimeout(() => {
           syncStatus.style.display = 'none';
           renderFullLayersTree();
@@ -3209,8 +3280,8 @@ export const clientScript = `
 
     try {
       syncStatus.style.display = 'block';
-      syncStatus.style.color = '#7c5910';
-      syncStatus.textContent = 'Duplicating element in ' + file.split('/').pop() + '...';
+      syncStatus.style.color = '#52525b';
+      syncStatus.textContent = 'Duplicating...';
 
       const res = await fetch('/__flimsy/api/update', {
         method: 'POST',
@@ -3219,8 +3290,9 @@ export const clientScript = `
       });
       const data = await res.json();
       if (data.success) {
-        syncStatus.textContent = 'Duplicated. Hot reloading...';
-        setTimeout(() => { syncStatus.style.display = 'none'; }, 1500);
+        syncStatus.style.color = '#15803d';
+        syncStatus.textContent = 'Duplicated.';
+        setTimeout(() => { syncStatus.style.display = 'none'; }, 1200);
       }
     } catch {}
   }
@@ -3234,7 +3306,7 @@ export const clientScript = `
     try {
       syncStatus.style.display = 'block';
       syncStatus.style.color = '#991b1b';
-      syncStatus.textContent = 'Deleting element in ' + file.split('/').pop() + '...';
+      syncStatus.textContent = 'Deleting...';
 
       const res = await fetch('/__flimsy/api/update', {
         method: 'POST',
@@ -3243,7 +3315,6 @@ export const clientScript = `
       });
       const data = await res.json();
       if (data.success) {
-        syncStatus.textContent = 'Deleted. Hot reloading...';
         clearSelection();
       }
     } catch {}
@@ -3257,7 +3328,7 @@ export const clientScript = `
 
     try {
       syncStatus.style.display = 'block';
-      syncStatus.style.color = '#7c5910';
+      syncStatus.style.color = '#52525b';
       syncStatus.textContent = 'Reordering...';
 
       const res = await fetch('/__flimsy/api/update', {
@@ -3267,8 +3338,9 @@ export const clientScript = `
       });
       const data = await res.json();
       if (data.success) {
-        syncStatus.textContent = 'Reordered. Hot reloading...';
-        setTimeout(() => { syncStatus.style.display = 'none'; }, 1500);
+        syncStatus.style.color = '#15803d';
+        syncStatus.textContent = 'Reordered.';
+        setTimeout(() => { syncStatus.style.display = 'none'; }, 1200);
       }
     } catch {}
   }
@@ -3287,7 +3359,7 @@ export const clientScript = `
     } catch {}
   }
 
-  // --- Element Selection (Single & Shift+Click Multi-Select) ---
+  // --- Element Selection (Single & Multi-Select + Smart Accordion Auto-Open) ---
   function selectElement(target, additive = false) {
     if (!target) return;
     if (selectedTarget && selectedTarget !== target) {
@@ -3331,11 +3403,25 @@ export const clientScript = `
 
     const file = selectedTarget.getAttribute('data-flimsy-file') || '';
     const line = selectedTarget.getAttribute('data-flimsy-line') || '';
+    const comp = selectedTarget.getAttribute('data-flimsy-comp') || '';
     const name = selectedTarget.getAttribute('data-flimsy-name') || selectedTarget.tagName.toLowerCase();
+    const parentTagged = findTaggedElement(selectedTarget.parentElement);
+    const isComp = isComponentBoundary(selectedTarget, parentTagged);
 
-    elemTagDisplay.textContent = '<' + name + '>';
+    elemTagDisplay.textContent = isComp && comp ? comp : ('<' + name + '>');
+    elemTagDisplay.classList.toggle('is-comp', isComp);
     elemLocDisplay.textContent = file.split('/').pop() + ':' + line;
     elemLocDisplay.title = file + ':' + line;
+
+    // Show inline Text row only when element is text-bearing
+    textGroup.style.display = isTextElement(selectedTarget) ? 'flex' : 'none';
+
+    // Smart auto-expand Stroke & Effects only when element already uses them
+    const toks = pendingClasses.split(/\\s+/);
+    const hasBorder = toks.some((t) => /^border($|-[1-9]|-[trbl]|-solid|-dashed|-dotted)/.test(t));
+    const hasEffect = toks.some((t) => /^(shadow(?!-none)|blur(?!-none)|backdrop-blur(?!-none))/.test(t));
+    setAccordionState('border', hasBorder);
+    setAccordionState('effects', hasEffect);
 
     if (selectedTargets.length > 1) {
       instanceBadge.textContent = selectedTargets.length + ' selected';
@@ -3403,7 +3489,7 @@ export const clientScript = `
     }
   }, true);
 
-  // --- Marquee Drag Multi-Selection on Canvas ---
+  // --- Marquee Drag Multi-Selection ---
   let isMarqueeDragging = false;
   let marqueeSuppressClick = false;
   let marqueeStartX = 0;
@@ -3416,7 +3502,6 @@ export const clientScript = `
 
     const el = document.elementFromPoint(e.clientX, e.clientY);
     const tagged = findTaggedElement(el);
-    // Allow marquee drag when starting on empty space OR holding Alt+drag/background drag
     if (tagged && !e.shiftKey) return;
 
     marqueeStartX = e.clientX;
@@ -3431,14 +3516,10 @@ export const clientScript = `
       }
       if (!isMarqueeDragging) return;
 
-      const left = Math.min(marqueeStartX, me.clientX);
-      const top = Math.min(marqueeStartY, me.clientY);
-      const width = Math.abs(dx);
-      const height = Math.abs(dy);
-      marqueeBox.style.left = left + 'px';
-      marqueeBox.style.top = top + 'px';
-      marqueeBox.style.width = width + 'px';
-      marqueeBox.style.height = height + 'px';
+      marqueeBox.style.left = Math.min(marqueeStartX, me.clientX) + 'px';
+      marqueeBox.style.top = Math.min(marqueeStartY, me.clientY) + 'px';
+      marqueeBox.style.width = Math.abs(dx) + 'px';
+      marqueeBox.style.height = Math.abs(dy) + 'px';
     };
 
     const onUp = (ue) => {
@@ -3462,7 +3543,6 @@ export const clientScript = `
         if (r.width === 0 || r.height === 0) return false;
         const intersects = !(r.right < mLeft || r.left > mRight || r.bottom < mTop || r.top > mBottom);
         if (!intersects) return false;
-        // Skip huge wrapper ancestors that completely engulf the entire marquee
         const engulfs = r.left <= mLeft && r.right >= mRight && r.top <= mTop && r.bottom >= mBottom;
         return !engulfs;
       });
@@ -3479,7 +3559,7 @@ export const clientScript = `
     window.addEventListener('pointerup', onUp);
   }, true);
 
-  // --- Click Selection (Single, Shift+Click Multi, or Empty-Canvas Deselect) ---
+  // --- Click & Double-Click Selection ---
   window.addEventListener('click', (e) => {
     if (!isInspectActive || marqueeSuppressClick) return;
     if (e.composedPath().includes(container)) return;
@@ -3496,7 +3576,6 @@ export const clientScript = `
     }
   }, true);
 
-  // --- Double Click for Direct Inline Text Editing ---
   window.addEventListener('dblclick', (e) => {
     if (!isInspectActive) return;
     if (e.composedPath().includes(container)) return;
@@ -3535,7 +3614,6 @@ export const clientScript = `
     }
   }, true);
 
-  // Keep boxes aligned on scroll & resize
   const syncViewportBoxes = () => {
     if (selectedTarget) updateAllSelectionBoxes();
     else if (hoveredTarget) updateHighlightBox(hoveredTarget, false);
@@ -3546,7 +3624,86 @@ export const clientScript = `
   window.addEventListener('scroll', syncViewportBoxes, { passive: true });
   window.addEventListener('resize', syncViewportBoxes, { passive: true });
 
-  // --- Inspector Input Listeners ---
+  // --- Compact Numeric Field & Select Handlers ---
+  function normalizeLengthToken(prefix, rawVal) {
+    const val = rawVal.trim().toLowerCase();
+    if (!val) return null;
+    if (['auto', 'full', 'fit', 'screen'].includes(val)) return prefix + '-' + val;
+    if (/^\\d+$/.test(val)) {
+      const px = parseInt(val, 10);
+      if (isSnapEnabled && px % 4 === 0 && TW_SPACING[String(px / 4)]) {
+        return prefix + '-' + (px / 4);
+      }
+      return prefix + '-[' + px + 'px]';
+    }
+    if (/^\\d+px$/.test(val)) {
+      const px = parseInt(val, 10);
+      if (isSnapEnabled && px % 4 === 0 && TW_SPACING[String(px / 4)]) {
+        return prefix + '-' + (px / 4);
+      }
+      return prefix + '-[' + val + ']';
+    }
+    if (TW_SPACING[val]) return prefix + '-' + val;
+    return prefix + '-[' + val + ']';
+  }
+
+  widthInput.addEventListener('change', () => {
+    const cls = normalizeLengthToken('w', widthInput.value);
+    if (cls) applyOptimisticClass(cls);
+  });
+
+  heightInput.addEventListener('change', () => {
+    const cls = normalizeLengthToken('h', heightInput.value);
+    if (cls) applyOptimisticClass(cls);
+  });
+
+  gapInput.addEventListener('change', () => {
+    const cls = normalizeLengthToken('gap', gapInput.value);
+    if (!cls) return;
+    if (selectedTarget && !/\\b(flex|inline-flex|grid|inline-grid)\\b/.test(selectedTarget.className || '')) {
+      applyOptimisticClass('flex', true);
+    }
+    applyOptimisticClass(cls);
+  });
+
+  padInput.addEventListener('change', () => {
+    const cls = normalizeLengthToken('p', padInput.value);
+    if (cls) applyOptimisticClass(cls);
+  });
+
+  radiusInput.addEventListener('change', () => {
+    const val = radiusInput.value.trim().toLowerCase();
+    if (!val) return;
+    if (val === '0' || val === '0px' || val === 'none') return applyOptimisticClass('rounded-none');
+    if (['sm', 'md', 'lg', 'xl', '2xl', '3xl', 'full'].includes(val)) return applyOptimisticClass('rounded-' + val);
+    const px = parseInt(val, 10);
+    if (!Number.isNaN(px)) {
+      const map = { 2: 'rounded-sm', 4: 'rounded', 6: 'rounded-md', 8: 'rounded-lg', 12: 'rounded-xl', 16: 'rounded-2xl', 24: 'rounded-3xl' };
+      if (isSnapEnabled && map[px]) return applyOptimisticClass(map[px]);
+      return applyOptimisticClass('rounded-[' + px + 'px]');
+    }
+    applyOptimisticClass('rounded-[' + val + ']');
+  });
+
+  sizeInput.addEventListener('change', () => {
+    const val = sizeInput.value.trim().toLowerCase();
+    if (!val) return;
+    if (TW_FONT_SIZE[val]) return applyOptimisticClass('text-' + val);
+    const px = parseInt(val, 10);
+    if (!Number.isNaN(px)) {
+      const steps = [[12, 'text-xs'], [14, 'text-sm'], [16, 'text-base'], [18, 'text-lg'], [20, 'text-xl'], [24, 'text-2xl'], [30, 'text-3xl'], [36, 'text-4xl'], [48, 'text-5xl']];
+      if (isSnapEnabled) {
+        const hit = steps.find(([p]) => p === px);
+        if (hit) return applyOptimisticClass(hit[1]);
+      }
+      return applyOptimisticClass('text-[' + px + 'px]');
+    }
+  });
+
+  weightSelect.addEventListener('change', () => applyOptimisticClass(weightSelect.value));
+  leadingSelect.addEventListener('change', () => applyOptimisticClass(leadingSelect.value));
+  trackingSelect.addEventListener('change', () => applyOptimisticClass(trackingSelect.value));
+
   textInput.addEventListener('input', () => {
     if (!selectedTarget) return;
     pendingText = textInput.value;
@@ -3569,22 +3726,18 @@ export const clientScript = `
     pushHistory();
   });
 
-  // Segmented control click handlers (auto-activates flex when clicking flex flow/justify controls)
   panel.querySelectorAll('.seg-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const cls = btn.getAttribute('data-class');
       if (!cls) return;
       if (btn.getAttribute('data-auto-flex') === '1' && selectedTarget) {
         const hasFlexOrGrid = /\\b(flex|inline-flex|grid|inline-grid)\\b/.test(selectedTarget.className || '');
-        if (!hasFlexOrGrid) {
-          applyOptimisticClass('flex', true);
-        }
+        if (!hasFlexOrGrid) applyOptimisticClass('flex', true);
       }
       applyOptimisticClass(cls);
     });
   });
 
-  // 9-Point Alignment Grid click handlers (auto-activates flex if missing)
   panel.querySelectorAll('.align-cell').forEach((cell) => {
     cell.addEventListener('click', () => {
       if (!selectedTarget) return;
@@ -3596,18 +3749,6 @@ export const clientScript = `
     });
   });
 
-  // Gap numeric input
-  gapInput.addEventListener('change', () => {
-    const val = gapInput.value.trim();
-    if (!val) return;
-    if (selectedTarget && !/\\b(flex|inline-flex|grid|inline-grid)\\b/.test(selectedTarget.className || '')) {
-      applyOptimisticClass('flex', true);
-    }
-    const cls = /^\\d+$/.test(val) && TW_SPACING[val] ? ('gap-' + val) : ('gap-[' + (/^\\d+$/.test(val) ? val + 'px' : val) + ']');
-    applyOptimisticClass(cls);
-  });
-
-  // Element Opacity Slider (smooth 60fps preview on input, single history push on change)
   opacitySlider.addEventListener('input', () => {
     const val = parseInt(opacitySlider.value, 10);
     opacityValLabel.textContent = val + '%';
@@ -3617,7 +3758,6 @@ export const clientScript = `
   });
   opacitySlider.addEventListener('change', () => pushHistory());
 
-  // Rotation Numeric Input
   rotateInput.addEventListener('change', () => {
     const raw = rotateInput.value.trim().replace(/deg$/i, '');
     const deg = parseInt(raw, 10);
@@ -3626,7 +3766,7 @@ export const clientScript = `
     applyOptimisticClass(cls);
   });
 
-  // --- Figma 2D Spectrum Color Picker Modal ---
+  // --- 2D Spectrum Color Picker Modal ---
   function hsvToRgb(h, s, v) {
     s = s / 100;
     v = v / 100;
@@ -3717,7 +3857,7 @@ export const clientScript = `
 
   function populateDocumentColors() {
     docColorsGrid.innerHTML = '';
-    const colors = new Set(['#ffffff', '#000000', '#fdf6df', '#d9b25f', '#1e1b16', '#0ea5e9', '#10b981', '#f43f5e']);
+    const colors = new Set(['#ffffff', '#09090b', '#f4f4f5', '#71717a', '#0ea5e9', '#10b981', '#7c3aed', '#f43f5e']);
 
     const all = document.querySelectorAll('*');
     for (let i = 0; i < all.length && colors.size < 16; i++) {
@@ -3791,7 +3931,7 @@ export const clientScript = `
 
   modalHexInput.addEventListener('change', () => {
     let val = modalHexInput.value.trim();
-    if (val && !val.startsWith('#') && val !== 'transparent') val = '#' + val;
+    if (val && !val.startsWith('#') && val.toLowerCase() !== 'transparent') val = '#' + val;
     colorThumb.style.background = val;
     colorHexLabel.textContent = val.toUpperCase();
     applyActiveColor(val, currentColorAlpha, false);
@@ -3811,9 +3951,9 @@ export const clientScript = `
       } catch {}
     } else {
       syncStatus.style.display = 'block';
-      syncStatus.style.color = '#7c5910';
-      syncStatus.textContent = 'Eyedropper API not supported in this browser.';
-      setTimeout(() => { syncStatus.style.display = 'none'; }, 1800);
+      syncStatus.style.color = '#52525b';
+      syncStatus.textContent = 'Eyedropper unsupported in this browser.';
+      setTimeout(() => { syncStatus.style.display = 'none'; }, 1600);
     }
   });
 
@@ -3833,9 +3973,7 @@ export const clientScript = `
     }
   });
 
-  colorCloseBtn.addEventListener('click', () => {
-    colorModal.style.display = 'none';
-  });
+  colorCloseBtn.addEventListener('click', () => { colorModal.style.display = 'none'; });
 
   const switchColorTarget = (mode) => {
     activeColorTarget = mode;
@@ -3858,7 +3996,7 @@ export const clientScript = `
       row.style.fontFamily = font.family;
       row.innerHTML = \`
         <span>\${font.name}</span>
-        <span style="font-size:9.5px; opacity:0.6; font-family:Inter, sans-serif;">\${font.category}</span>
+        <span style="font-size:9.5px; opacity:0.55; font-family:Inter, sans-serif;">\${font.category}</span>
       \`;
       row.addEventListener('click', () => {
         currentFontName.textContent = font.name;
@@ -3870,7 +4008,7 @@ export const clientScript = `
             const link = document.createElement('link');
             link.id = fontId;
             link.rel = 'stylesheet';
-            link.href = 'https://fonts.googleapis.com/css2?family=' + encodeURIComponent(font.name) + ':wght@400;600;700&display=swap';
+            link.href = 'https://fonts.googleapis.com/css2?family=' + encodeURIComponent(font.name) + ':wght@400;500;600;700&display=swap';
             document.head.appendChild(link);
           }
         }
@@ -3899,11 +4037,10 @@ export const clientScript = `
   fontSearch.addEventListener('input', () => renderFontList(fontSearch.value));
   fontCloseBtn.addEventListener('click', () => { fontModal.style.display = 'none'; });
 
-  // --- Spacing, Corner, & Individual Border Side Toggles ---
+  // --- Per-Side Padding, Independent Corners, & Individual Border Sides ---
   padLinkBtn.addEventListener('click', () => {
     isPaddingLinked = !isPaddingLinked;
     padLinkBtn.classList.toggle('active', !isPaddingLinked);
-    padLinkBtn.textContent = isPaddingLinked ? 'Linked' : '4-Sides';
     padGrid.style.display = isPaddingLinked ? 'none' : 'grid';
   });
 
@@ -3981,7 +4118,7 @@ export const clientScript = `
     aiGenerate.disabled = true;
     aiGenerate.textContent = 'Applying...';
     aiFeedback.style.display = 'block';
-    aiFeedback.textContent = 'Generating style suggestion...';
+    aiFeedback.textContent = 'Generating suggestion...';
 
     const file = selectedTarget.getAttribute('data-flimsy-file');
     const line = parseInt(selectedTarget.getAttribute('data-flimsy-line'), 10);
@@ -4013,7 +4150,7 @@ export const clientScript = `
       aiFeedback.textContent = 'Network error contacting AI assist.';
     } finally {
       aiGenerate.disabled = false;
-      aiGenerate.textContent = 'Apply AI Style';
+      aiGenerate.textContent = 'Apply';
     }
   });
 
@@ -4032,9 +4169,7 @@ export const clientScript = `
           body: JSON.stringify({ file, line, col, prompt }),
         });
         const data = await res.json();
-        if (data.success && data.copyPrompt) {
-          currentAICopyPrompt = data.copyPrompt;
-        }
+        if (data.success && data.copyPrompt) currentAICopyPrompt = data.copyPrompt;
       } catch {}
     }
 
@@ -4044,15 +4179,15 @@ export const clientScript = `
     try {
       await navigator.clipboard.writeText(textToCopy);
       aiFeedback.style.display = 'block';
-      aiFeedback.textContent = 'Context & prompt copied to clipboard.';
-      setTimeout(() => { aiFeedback.style.display = 'none'; }, 2000);
+      aiFeedback.textContent = 'Copied to clipboard.';
+      setTimeout(() => { aiFeedback.style.display = 'none'; }, 1800);
     } catch {
       aiFeedback.style.display = 'block';
       aiFeedback.textContent = 'Clipboard permission denied.';
     }
   });
 
-  // --- Discard / Reset Button ---
+  // --- Reset / Discard ---
   discardBtn.addEventListener('click', () => {
     if (selectedTargets.length === 0) return;
     for (const el of selectedTargets) {
@@ -4078,12 +4213,12 @@ export const clientScript = `
     renderDiff();
     updateSyncBadge();
     syncStatus.style.display = 'block';
-    syncStatus.style.color = '#5e5444';
+    syncStatus.style.color = '#52525b';
     syncStatus.textContent = 'Changes reset.';
     setTimeout(() => { syncStatus.style.display = 'none'; }, 1200);
   });
 
-  // --- Compute Exact Class Diff (Safe for StringLiteral, TemplateLiteral, and cn()/clsx()) ---
+  // --- Exact Class Diff Helper ---
   function buildClassUpdateAction(origCls, nextCls) {
     const oldTokens = (origCls || '').split(/\\s+/).filter(Boolean);
     const newTokens = (nextCls || '').split(/\\s+/).filter(Boolean);
@@ -4125,8 +4260,8 @@ export const clientScript = `
 
     if (dirtyUpdates.length === 0) {
       syncStatus.style.display = 'block';
-      syncStatus.style.color = '#5e5444';
-      syncStatus.textContent = 'No modifications to sync.';
+      syncStatus.style.color = '#52525b';
+      syncStatus.textContent = 'No changes to sync.';
       setTimeout(() => { syncStatus.style.display = 'none'; }, 1200);
       return;
     }
@@ -4185,9 +4320,9 @@ export const clientScript = `
         renderDiff();
 
         syncStatus.style.display = 'block';
-        syncStatus.style.color = '#166534';
+        syncStatus.style.color = '#15803d';
         syncStatus.textContent = isBatch
-          ? ('Synced ' + dirtyUpdates.length + ' elements to code')
+          ? ('Synced ' + dirtyUpdates.length + ' elements')
           : ('Synced to ' + dirtyUpdates[0].file.split('/').pop() + ':' + dirtyUpdates[0].line);
         dockSyncBadge.className = 'sync-status-badge synced';
         dockSyncBadge.querySelector('.text').textContent = 'Synced';
@@ -4196,7 +4331,7 @@ export const clientScript = `
         setTimeout(() => {
           updateSyncBadge();
           syncStatus.style.display = 'none';
-        }, 1800);
+        }, 1600);
       } else if (data.conflict && !isBatch) {
         const u = dirtyUpdates[0];
         syncStatus.style.display = 'block';
