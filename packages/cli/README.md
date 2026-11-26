@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://cdn.jsdelivr.net/npm/flimsy-dev@0.2.0/assets/logo.jpg" alt="Flimsy Logo" width="140" />
+  <img src="https://cdn.jsdelivr.net/npm/flimsy-dev@0.3.0/assets/logo.jpg" alt="Flimsy Logo" width="140" />
 </p>
 
 <h1 align="center">Flimsy</h1>
