@@ -1,11 +1,11 @@
 ---
 name: flimsy
-description: Launch and work with Flimsy, a local-first visual editor and AST sync studio for React, Vite, and Tailwind CSS. Use when the user wants to visually edit UI on localhost, install or configure flimsy-dev, or refine an element selected in the Flimsy browser studio via MCP.
+description: Launch and work with Flimsy, a local-first visual editor and AST sync studio for React, Preact, SolidJS, Qwik, Vue, Svelte, Astro, Angular HTML, and Vanilla HTML with Tailwind CSS. Use when the user wants to visually edit UI on localhost, install or configure flimsy-dev, or refine an element selected in the Flimsy browser studio via MCP.
 ---
 
 # Flimsy Visual-to-Code Workflow
 
-Flimsy lets developers visually move, resize, scale, style, duplicate, and reparent React + Tailwind elements on localhost and write deterministic AST changes directly into `.tsx` source files with zero AI tokens for standard edits.
+Flimsy lets developers visually move, resize, scale, style, duplicate, and reparent elements on localhost and write deterministic AST/markup changes directly into `.tsx`, `.jsx`, `.vue`, `.svelte`, `.astro`, and `.html` source files with zero AI tokens for standard edits.
 
 ## 1. Launch Visual Studio (Zero Install)
 

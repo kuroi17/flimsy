@@ -3,6 +3,8 @@ import path from 'node:path';
 import * as recast from 'recast';
 import * as babelParser from '@babel/parser';
 import traversePkg from '@babel/traverse';
+import { detectLanguage, isMarkupLanguage } from './languages.js';
+import { extractMarkupAIContext } from './markup-updater.js';
 
 const traverse = (traversePkg as any).default || traversePkg;
 
@@ -46,6 +48,10 @@ export async function extractAIElementContext(
   const compName = path.basename(relPath).replace(/\.[jt]sx?$/, '');
 
   const code = await fs.readFile(resolvedPath, 'utf-8');
+  const lang = detectLanguage(resolvedPath);
+  if (isMarkupLanguage(lang)) {
+    return extractMarkupAIContext(code, lang, relPath, options);
+  }
 
   const ast = recast.parse(code, {
     parser: {
@@ -91,13 +97,13 @@ export async function extractAIElementContext(
       ? recast.print(targetParentNode).code.slice(0, 300) + '...'
       : '';
 
-  // Extract current classes
+  // Extract current classes (supports both React `className` and SolidJS/Preact/Qwik `class`)
   let currentClasses = '';
   const classAttr = targetElementNode.openingElement.attributes?.find(
     (attr: any) =>
       attr.type === 'JSXAttribute' &&
       attr.name &&
-      attr.name.name === 'className'
+      (attr.name.name === 'className' || attr.name.name === 'class')
   );
   if (classAttr) {
     if (classAttr.value?.type === 'StringLiteral') {

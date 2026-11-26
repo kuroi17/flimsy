@@ -253,6 +253,35 @@ describe('Vite Plugin Round-trip Integration', () => {
     expect(saved?.primary.line).toBe(9);
   });
 
+  it('transforms Vue, Svelte, Astro, and Vanilla HTML while skipping virtual style/script queries', async () => {
+    const plugin = flimsy();
+    const transform = plugin.transform as (code: string, id: string) => any;
+    const transformHtml = plugin.transformIndexHtml as (html: string, ctx: any) => any;
+
+    const vueCode = `<template><button class="px-4">Vue</button></template><style>.a{}</style>`;
+    const vueRes = transform.call({} as any, vueCode, '/app/src/Btn.vue');
+    expect(vueRes?.code).toContain('data-flimsy-name="button"');
+    expect(transform.call({} as any, '.a{}', '/app/src/Btn.vue?vue&type=style')).toBeNull();
+
+    const svelteCode = `<script>let x = 1;</script><h1 class="text-xl">Hi {x}</h1>`;
+    const svelteRes = transform.call({} as any, svelteCode, '/app/src/Title.svelte');
+    expect(svelteRes?.code).toContain('data-flimsy-name="h1"');
+
+    const astroCode = `---\nconst n = 1;\n---\n<div class="p-4">Astro</div>`;
+    const astroRes = transform.call({} as any, astroCode, '/app/src/Box.astro');
+    expect(astroRes?.code).toContain('data-flimsy-name="div"');
+
+    const vanillaHtml = `<!doctype html><html><body><section class="p-6"><h1>Static</h1></section></body></html>`;
+    const htmlRes = transformHtml(vanillaHtml, { filename: '/app/index.html' });
+    expect(htmlRes.html).toContain('data-flimsy-name="section"');
+    expect(htmlRes.html).toContain('data-flimsy-name="h1"');
+    expect(htmlRes.tags[0].attrs.src).toBe('/@flimsy/client.js');
+
+    const spaHtml = `<!doctype html><html><body><div id="root"></div></body></html>`;
+    const spaRes = transformHtml(spaHtml, { filename: '/app/index.html' });
+    expect(spaRes.html).not.toContain('data-flimsy-file');
+  });
+
   it('provides AI context packaging and offline heuristics at /__flimsy/api/ai', async () => {
     const resModule = await fetch(`${serverUrl}/src/components/Hero.tsx`);
     const code = await resModule.text();

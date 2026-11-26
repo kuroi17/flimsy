@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {
   injectSourceLocations,
+  isSupportedSourceFile,
   updateSourceFile,
   extractJSXSnippets,
   extractAIElementContext,
@@ -38,9 +39,15 @@ export function flimsy(options: FlimsyOptions = {}): Plugin {
 
     transform(code, id) {
       if (options.enabled === false || isDuplicate) return null;
+      if (id.includes('node_modules')) return null;
+
+      // Skip Vite/framework virtual sub-modules (e.g. ?vue&type=style, ?vue&type=script, ?raw, ?url, ?inline)
+      if (/[?&](type=(style|script)|raw|url|inline)\b/i.test(id)) {
+        return null;
+      }
 
       const cleanId = id.split('?')[0];
-      if (!/\.[jt]sx$/.test(cleanId) || cleanId.includes('node_modules')) {
+      if (!isSupportedSourceFile(cleanId)) {
         return null;
       }
 
@@ -234,18 +241,29 @@ export function flimsy(options: FlimsyOptions = {}): Plugin {
       });
     },
 
-    transformIndexHtml(html) {
+    transformIndexHtml(html, ctx) {
       if (options.enabled === false || isDuplicate) return html;
-      return [
-        {
-          tag: 'script',
-          attrs: {
-            type: 'module',
-            src: '/@flimsy/client.js',
+
+      // Stamp static elements in Vanilla HTML / HTMX / Alpine pages (skips empty SPA #root/#app mounts)
+      let stampedHtml = html;
+      if (ctx?.filename && /\.html?$/i.test(ctx.filename)) {
+        const res = injectSourceLocations(html, ctx.filename, { rootDir: root });
+        if (res.code) stampedHtml = res.code;
+      }
+
+      return {
+        html: stampedHtml,
+        tags: [
+          {
+            tag: 'script',
+            attrs: {
+              type: 'module',
+              src: '/@flimsy/client.js',
+            },
+            injectTo: 'body',
           },
-          injectTo: 'body',
-        },
-      ];
+        ],
+      };
     },
   };
 

@@ -5,7 +5,7 @@
 <h1 align="center">Flimsy</h1>
 
 <p align="center">
-  <strong>Direct visual-to-code synchronization for React, Vite, and Tailwind CSS.</strong><br />
+  <strong>Direct visual-to-code synchronization for modern frontend frameworks and Tailwind CSS.</strong><br />
   If you can visually fix a UI faster than explaining the fix to an LLM, Flimsy belongs in your workflow.
 </p>
 
@@ -21,7 +21,8 @@
 
 ## Key Capabilities
 
-- **Zero AI Tokens for Standard Visual Edits:** Writes directly to your `.tsx` files via deterministic AST reconciliation (`recast` + `magic-string`), preserving formatting, comments, and dynamic expressions.
+- **Multi-Language Frontend Support:** Works deterministically across **React, Preact, SolidJS, Qwik, Vue JSX** (`.tsx`/`.jsx` with `className` and `class`), **Vue SFC** (`.vue`), **Svelte** (`.svelte`), **Astro** (`.astro`), and **Vanilla HTML / Angular / HTMX / Alpine** (`.html`/`.htm`).
+- **Zero AI Tokens for Standard Visual Edits:** Writes directly to your source files via deterministic AST & span reconciliation (`recast` + `magic-string`), preserving formatting, comments, directives, and dynamic expressions.
 - **Figma-Style Direct Manipulation:** Freeform canvas drag-to-move (`Rel` / `Abs`), 8-point resize with aspect-ratio lock (`Shift`), Canva/Figma corner text scaling, rotation handle, `Alt` distance measurement guides, and `Alt + Drag` live DOM reparenting.
 - **Viewport Zoom & Pan Camera:** Smooth cursor-anchored zoom (`Ctrl + Scroll` / pinch, `25%–300%`) and canvas panning (`Space + Drag`, Hand tool `H`, middle-mouse drag) without polluting user source code.
 - **Multi-Select & Group Copy/Paste:** Marquee select, `Shift + Click`, or `Ctrl + A` to select sibling elements/frames, then drag, style, or `Ctrl + C` / `Ctrl + V` cloned JSX cleanly into target `.tsx` files.

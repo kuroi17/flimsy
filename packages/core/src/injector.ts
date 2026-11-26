@@ -3,6 +3,8 @@ import traversePkg from '@babel/traverse';
 import MagicString from 'magic-string';
 import path from 'node:path';
 import type { InjectOptions } from './types.js';
+import { detectLanguage, isMarkupLanguage } from './languages.js';
+import { injectMarkupSourceLocations } from './markup-updater.js';
 
 // Handle Babel ESM / CJS interop
 const traverse = (traversePkg as any).default || traversePkg;
@@ -12,10 +14,18 @@ export function injectSourceLocations(
   id: string,
   options: InjectOptions = {}
 ): { code: string; map: any } {
-  // Only process JSX and TSX files
   const cleanId = id.split('?')[0];
-  if (!/\.[jt]sx$/.test(cleanId) || cleanId.includes('node_modules')) {
+  if (cleanId.includes('node_modules')) {
     return { code, map: null };
+  }
+
+  const lang = detectLanguage(cleanId);
+  if (!lang) {
+    return { code, map: null };
+  }
+
+  if (isMarkupLanguage(lang)) {
+    return injectMarkupSourceLocations(code, cleanId, lang, options);
   }
 
   const root = options.rootDir || process.cwd();

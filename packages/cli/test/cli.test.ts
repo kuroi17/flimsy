@@ -149,4 +149,75 @@ describe('flimsy CLI package exports', () => {
       await fsp.rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  it('edits Vue SFC and Svelte files cleanly via MCP stdio server', async () => {
+    const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'flimsy-mcp-multilang-'));
+    const vuePath = path.join(tempDir, 'Hero.vue');
+    const sveltePath = path.join(tempDir, 'Badge.svelte');
+    await fsp.writeFile(
+      vuePath,
+      `<template>\n  <button class="px-4 py-2 bg-sky-500" :class="{ active }">Vue CTA</button>\n</template>\n`,
+      'utf-8'
+    );
+    await fsp.writeFile(
+      sveltePath,
+      `<script>let label = 'New';</script>\n<span class="px-2 py-1 bg-slate-800">{label}</span>\n`,
+      'utf-8'
+    );
+
+    const binPath = path.resolve(__dirname, '../bin/flimsy.js');
+    const child = spawn(process.execPath, [binPath, 'mcp', '--root', tempDir], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    let rawStdout = '';
+    child.stdout.on('data', (chunk) => {
+      rawStdout += chunk.toString('utf-8');
+    });
+
+    const reqs = [
+      { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05' } },
+      {
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: {
+          name: 'flimsy_update_classes',
+          arguments: { file: 'Hero.vue', line: 2, col: 2, newClasses: 'bg-zinc-950 rounded-full' },
+        },
+      },
+      {
+        jsonrpc: '2.0',
+        id: 3,
+        method: 'tools/call',
+        params: {
+          name: 'flimsy_update_classes',
+          arguments: { file: 'Badge.svelte', line: 2, col: 0, newClasses: 'bg-emerald-600 text-white' },
+        },
+      },
+    ];
+    for (const r of reqs) child.stdin.write(JSON.stringify(r) + '\n');
+    child.stdin.end();
+
+    await new Promise<void>((resolve, reject) => {
+      child.on('error', reject);
+      child.on('close', () => resolve());
+    });
+
+    try {
+      const parsed = rawStdout.trim().split(/\r?\n/).map((l) => JSON.parse(l));
+      expect(parsed.length).toBe(3);
+      expect(parsed[1].result.isError).toBeUndefined();
+      expect(parsed[2].result.isError).toBeUndefined();
+
+      const vueDisk = await fsp.readFile(vuePath, 'utf-8');
+      expect(vueDisk).toContain('class="px-4 py-2 bg-zinc-950 rounded-full"');
+      expect(vueDisk).toContain(':class="{ active }"');
+
+      const svelteDisk = await fsp.readFile(sveltePath, 'utf-8');
+      expect(svelteDisk).toContain('class="px-2 py-1 bg-emerald-600 text-white"');
+      expect(svelteDisk).toContain('{label}');
+    } finally {
+      await fsp.rm(tempDir, { recursive: true, force: true });
+    }
+  });
 });

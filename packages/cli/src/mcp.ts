@@ -14,12 +14,12 @@ const MCP_TOOLS = [
   {
     name: 'flimsy_get_selection',
     description:
-      'Get the currently selected UI element(s) from the active Flimsy localhost studio (file, line, column, component, JSX snippet, Tailwind classes, text), or inspect a specific JSX element when file and line are provided.',
+      'Get the currently selected UI element(s) from the active Flimsy localhost studio (file, line, column, component, markup/JSX snippet, Tailwind classes, text), or inspect any supported frontend source file (.tsx, .jsx, .vue, .svelte, .astro, .html) when file and line are provided.',
     inputSchema: {
       type: 'object',
       properties: {
-        file: { type: 'string', description: 'Optional relative or absolute path to a .tsx/.jsx file' },
-        line: { type: 'number', description: 'Optional 1-based line number of the JSX element' },
+        file: { type: 'string', description: 'Optional relative or absolute path to a .tsx, .jsx, .vue, .svelte, .astro, or .html file' },
+        line: { type: 'number', description: 'Optional 1-based line number of the element' },
         col: { type: 'number', description: 'Optional 0-based column number (defaults to 0)' },
         prompt: { type: 'string', description: 'Optional goal description for formatted context' },
       },
@@ -28,11 +28,11 @@ const MCP_TOOLS = [
   {
     name: 'flimsy_update_classes',
     description:
-      'Deterministically update Tailwind CSS classes on a JSX element in source code via Flimsy AST reconciliation (preserves formatting, comments, cn(), clsx(), and template literals). Defaults to the active Flimsy browser selection if file/line are omitted.',
+      'Deterministically update Tailwind CSS classes on an element in .tsx, .jsx, .vue, .svelte, .astro, or .html source code via Flimsy reconciliation (preserves formatting, comments, cn(), clsx(), :class, class:*, [ngClass]). Defaults to active Flimsy browser selection if file/line are omitted.',
     inputSchema: {
       type: 'object',
       properties: {
-        file: { type: 'string', description: 'Optional path to .tsx/.jsx file (defaults to active selection)' },
+        file: { type: 'string', description: 'Optional path to source file (defaults to active selection)' },
         line: { type: 'number', description: 'Optional 1-based line number (defaults to active selection)' },
         col: { type: 'number', description: 'Optional 0-based column number (defaults to active selection or 0)' },
         newClasses: { type: 'string', description: 'Space-separated Tailwind classes to apply' },
@@ -53,11 +53,11 @@ const MCP_TOOLS = [
   {
     name: 'flimsy_update_text',
     description:
-      'Update the visible text content of a JSX element in source code while preserving inline JSX expressions. Defaults to the active Flimsy browser selection if file/line are omitted.',
+      'Update the visible text content of an element in .tsx, .jsx, .vue, .svelte, .astro, or .html source code while preserving template expressions ({expr}, {{ expr }}). Defaults to active Flimsy browser selection if file/line are omitted.',
     inputSchema: {
       type: 'object',
       properties: {
-        file: { type: 'string', description: 'Optional path to .tsx/.jsx file (defaults to active selection)' },
+        file: { type: 'string', description: 'Optional path to source file (defaults to active selection)' },
         line: { type: 'number', description: 'Optional 1-based line number (defaults to active selection)' },
         col: { type: 'number', description: 'Optional 0-based column number (defaults to active selection or 0)' },
         text: { type: 'string', description: 'New text content for the element' },
@@ -68,17 +68,17 @@ const MCP_TOOLS = [
   {
     name: 'flimsy_paste_elements',
     description:
-      'Insert one or more JSX element snippets after or inside a target JSX element in source code with Babel syntax validation. Defaults to the active Flimsy browser selection if file/line are omitted.',
+      'Insert one or more JSX or HTML/template element snippets after or inside a target element with pre-write syntax validation. Defaults to active Flimsy browser selection if file/line are omitted.',
     inputSchema: {
       type: 'object',
       properties: {
-        file: { type: 'string', description: 'Optional path to .tsx/.jsx file (defaults to active selection)' },
+        file: { type: 'string', description: 'Optional path to source file (defaults to active selection)' },
         line: { type: 'number', description: 'Optional 1-based line number (defaults to active selection)' },
         col: { type: 'number', description: 'Optional 0-based column number (defaults to active selection or 0)' },
         snippets: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Clean JSX element snippets to insert',
+          description: 'Clean JSX or markup element snippets to insert',
         },
         position: {
           type: 'string',

@@ -4,6 +4,8 @@ import * as recast from 'recast';
 import * as babelParser from '@babel/parser';
 import traversePkg from '@babel/traverse';
 import type { UpdateAction, UpdateResult, UpdateSourceOptions } from './types.js';
+import { detectLanguage, isMarkupLanguage } from './languages.js';
+import { applyMarkupActions, extractMarkupSnippets } from './markup-updater.js';
 
 const traverse = (traversePkg as any).default || traversePkg;
 const b = recast.types.builders;
@@ -26,6 +28,12 @@ export async function extractJSXSnippets(
   try {
     for (const [resolvedPath, locs] of byFile.entries()) {
       const code = await fs.readFile(resolvedPath, 'utf-8');
+      const lang = detectLanguage(resolvedPath);
+      if (isMarkupLanguage(lang)) {
+        snippets.push(...extractMarkupSnippets(code, lang, locs));
+        continue;
+      }
+
       const ast = recast.parse(code, {
         parser: {
           parse(source: string) {
@@ -104,6 +112,58 @@ export async function updateSourceFile(
       success: false,
       filePath: resolvedPath,
       error: `Failed to read file ${resolvedPath}: ${err.message}`,
+    };
+  }
+
+  // Dispatch Vue, Svelte, Astro, and HTML templates to the span-accurate markup updater
+  const lang = detectLanguage(resolvedPath);
+  if (isMarkupLanguage(lang)) {
+    const actionList: UpdateAction[] =
+      options.actions && Array.isArray(options.actions)
+        ? options.actions
+        : options.action
+          ? [options.action]
+          : [];
+
+    const markupRes = applyMarkupActions(
+      oldCode,
+      lang,
+      options.line,
+      options.column,
+      actionList,
+      reconcileClasses
+    );
+
+    if (!markupRes.success || typeof markupRes.newCode !== 'string') {
+      return {
+        success: false,
+        filePath: resolvedPath,
+        error: markupRes.error || `Failed to update ${lang} template`,
+      };
+    }
+
+    try {
+      await fs.writeFile(resolvedPath, markupRes.newCode, 'utf-8');
+    } catch (err: any) {
+      return {
+        success: false,
+        filePath: resolvedPath,
+        error: `Failed to write file ${resolvedPath}: ${err.message}`,
+      };
+    }
+
+    let newMtime = Date.now();
+    try {
+      const newStats = await fs.stat(resolvedPath);
+      newMtime = newStats.mtimeMs;
+    } catch {}
+
+    return {
+      success: true,
+      filePath: resolvedPath,
+      oldCode,
+      newCode: markupRes.newCode,
+      mtime: newMtime,
     };
   }
 
@@ -487,11 +547,12 @@ function applyAction(
       elementNode.children.push(newTextNode);
     }
   } else if (action.type === 'update-class') {
+    // Support both React (`className`) and SolidJS / Preact / Qwik / Vue JSX (`class`)
     let classAttr = openingNode.attributes?.find(
       (attr: any) =>
         attr.type === 'JSXAttribute' &&
         attr.name &&
-        attr.name.name === 'className'
+        (attr.name.name === 'className' || attr.name.name === 'class')
     );
 
     if (classAttr) {
@@ -579,12 +640,24 @@ function applyAction(
         }
       }
     } else {
-      // Add new className attribute
+      // Detect whether this JSX file uses `class=` (SolidJS/Preact/Qwik/Vue JSX) or `className=` (React)
+      let classCount = 0;
+      let classNameCount = 0;
+      if (ast) {
+        traverse(ast, {
+          JSXAttribute(p: any) {
+            if (p.node?.name?.name === 'class') classCount++;
+            else if (p.node?.name?.name === 'className') classNameCount++;
+          },
+        });
+      }
+      const attrName = classCount > classNameCount ? 'class' : 'className';
+
       if (!openingNode.attributes) {
         openingNode.attributes = [];
       }
       const newAttr = b.jsxAttribute(
-        b.jsxIdentifier('className'),
+        b.jsxIdentifier(attrName),
         b.stringLiteral(action.newClasses.trim())
       );
       openingNode.attributes.push(newAttr);
