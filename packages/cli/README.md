@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://cdn.jsdelivr.net/npm/flimsy-dev@0.3.0/assets/logo.jpg" alt="Flimsy Logo" width="140" />
+  <img src="https://cdn.jsdelivr.net/npm/flimsy-dev@0.4.0/assets/logo.jpg" alt="Flimsy Logo" width="140" />
 </p>
 
 <h1 align="center">Flimsy</h1>
@@ -13,6 +13,10 @@
   <a href="https://www.npmjs.com/package/flimsy-dev"><img src="https://img.shields.io/npm/v/flimsy-dev.svg" alt="npm version" /></a>
   <a href="https://github.com/kuroi17/flimsy/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
   <a href="#privacy--local-first-guarantee"><img src="https://img.shields.io/badge/telemetry-none-brightgreen.svg" alt="Zero Telemetry" /></a>
+</p>
+
+<p align="center">
+  <img src="https://cdn.jsdelivr.net/npm/flimsy-dev@0.4.0/assets/demo.gif" alt="Flimsy Visual Studio Demo" width="860" />
 </p>
 
 ---
@@ -80,6 +84,19 @@ Start your normal Vite dev server:
 
 ```bash
 npm run dev
+```
+
+### Option 2b: Next.js Integration (`flimsy-dev/next`)
+
+Wrap your `next.config.mjs` (or `next.config.ts`) — works with both Webpack and Turbopack in development, and becomes a zero-byte no-op during `next build`:
+
+```js
+import { withFlimsy } from 'flimsy-dev/next';
+
+/** @type {import('next').NextConfig} */
+const nextConfig = {};
+
+export default withFlimsy(nextConfig);
 ```
 
 ### Option 3: Optional MCP Server (Manual First, AI When Needed)

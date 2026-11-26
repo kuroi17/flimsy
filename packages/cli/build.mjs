@@ -33,11 +33,13 @@ const workspaceAliasPlugin = {
   },
 };
 
+// 1. Main ESM Node bundles (core + vite + mcp + next wrapper)
 await build({
   entryPoints: [
     path.join(__dirname, 'src/index.ts'),
     path.join(__dirname, 'src/vite.ts'),
     path.join(__dirname, 'src/mcp.ts'),
+    path.join(__dirname, 'src/next.ts'),
   ],
   outdir: distDir,
   bundle: true,
@@ -47,6 +49,28 @@ await build({
   sourcemap: true,
   external,
   plugins: [workspaceAliasPlugin],
+});
+
+// 2. CommonJS Webpack/Turbopack loader for Next.js (`dist/next-loader.cjs`)
+await build({
+  entryPoints: [path.join(__dirname, 'src/next-loader.cts')],
+  outfile: path.join(distDir, 'next-loader.cjs'),
+  bundle: true,
+  platform: 'node',
+  target: 'node18',
+  format: 'cjs',
+  external,
+  plugins: [workspaceAliasPlugin],
+});
+
+// 3. Browser client bootstrap module for Next.js dev entries (`dist/next-client-bootstrap.js`)
+await build({
+  entryPoints: [path.join(__dirname, 'src/next-client-bootstrap.ts')],
+  outfile: path.join(distDir, 'next-client-bootstrap.js'),
+  bundle: true,
+  platform: 'browser',
+  target: 'es2020',
+  format: 'esm',
 });
 
 // Bundle TypeScript declarations cleanly so end users need zero external sub-packages
@@ -83,4 +107,26 @@ await fs.writeFile(
   'utf-8'
 );
 
-console.log('✓ Unified flimsy-dev bundle & declarations built in dist/');
+await fs.writeFile(
+  path.join(distDir, 'next.d.ts'),
+  `export interface FlimsyNextOptions {
+  enabled?: boolean;
+  port?: number;
+  rootDir?: string;
+}
+export interface FlimsyNextServerHandle {
+  port: number;
+  url: string;
+  close: () => Promise<void>;
+}
+export declare function getFlimsyLoaderPath(): string;
+export declare function getFlimsyClientBootstrapPath(): string;
+export declare function getFlimsyClientScriptUrl(port?: number): string;
+export declare function startFlimsyNextServer(options?: { rootDir?: string; port?: number }): Promise<FlimsyNextServerHandle>;
+export declare function withFlimsy<T extends Record<string, any> = Record<string, any>>(nextConfig?: T, options?: FlimsyNextOptions): T;
+export default withFlimsy;
+`,
+  'utf-8'
+);
+
+console.log('Unified flimsy-dev bundle (core, vite, mcp, next) & declarations built in dist/');

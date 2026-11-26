@@ -32,6 +32,14 @@ export default defineConfig({
 });
 ```
 
+For **Next.js** (`next.config.mjs` / `next.config.ts`):
+
+```js
+import { withFlimsy } from 'flimsy-dev/next';
+
+export default withFlimsy({});
+```
+
 In the browser, press `Alt + X` to toggle inspect mode and `Shift + S` (or `Ctrl + S`) to commit visual edits to `.tsx`.
 
 ## 2. Optional MCP Integration (Manual First, AI When Needed)

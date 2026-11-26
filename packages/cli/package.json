@@ -1,6 +1,6 @@
 {
   "name": "flimsy-dev",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "description": "Direct visual-to-code synchronization tool for React, Vue, Svelte, Astro, Solid, Angular, HTML, and Tailwind CSS with optional MCP bridge",
   "license": "MIT",
@@ -15,6 +15,7 @@
   },
   "keywords": [
     "vite",
+    "nextjs",
     "visual-editor",
     "tailwind",
     "react",
@@ -49,6 +50,10 @@
     "./vite": {
       "import": "./dist/vite.js",
       "types": "./dist/vite.d.ts"
+    },
+    "./next": {
+      "import": "./dist/next.js",
+      "types": "./dist/next.d.ts"
     },
     "./mcp": {
       "import": "./dist/mcp.js"

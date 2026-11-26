@@ -10,7 +10,13 @@
     "type": "git",
     "url": "https://github.com/kuroi17/flimsy.git"
   },
-  "keywords": ["vite-plugin", "vite", "visual-editor", "react", "tailwind"],
+  "keywords": [
+    "vite-plugin",
+    "vite",
+    "visual-editor",
+    "react",
+    "tailwind"
+  ],
   "files": [
     "dist"
   ],
@@ -23,7 +29,8 @@
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "node scripts/build-client.mjs && tsc -p tsconfig.client.json && tsc",
+    "pretest": "node scripts/build-client.mjs",
     "test": "vitest run"
   },
   "dependencies": {
@@ -34,9 +41,9 @@
   },
   "devDependencies": {
     "@types/node": "^22.13.4",
+    "esbuild": "0.28.2",
     "typescript": "^5.7.3",
     "vite": "^6.2.0",
     "vitest": "^3.0.5"
   }
 }
-

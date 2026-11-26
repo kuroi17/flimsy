@@ -15,6 +15,10 @@
   <a href="#privacy--local-first-guarantee"><img src="https://img.shields.io/badge/telemetry-none-brightgreen.svg" alt="Zero Telemetry" /></a>
 </p>
 
+<p align="center">
+  <img src="./assets/demo.gif" alt="Flimsy Visual Studio Demo" width="860" />
+</p>
+
 ---
 
 **Flimsy** embeds an isolated, glassmorphic visual studio directly on your running Vite localhost server. Move, resize, scale, style, duplicate, and reparent React/Tailwind elements directly in the browser, preview the exact diff, and write deterministic AST changes straight back into your `.tsx` source files with zero AI token overhead.
@@ -80,6 +84,19 @@ Start your normal Vite dev server:
 
 ```bash
 npm run dev
+```
+
+### Option 2b: Next.js Integration (`flimsy-dev/next`)
+
+Wrap your `next.config.mjs` (or `next.config.ts`) — works with both Webpack and Turbopack in development, and becomes a zero-byte no-op during `next build`:
+
+```js
+import { withFlimsy } from 'flimsy-dev/next';
+
+/** @type {import('next').NextConfig} */
+const nextConfig = {};
+
+export default withFlimsy(nextConfig);
 ```
 
 ### Option 3: Optional MCP Server (Manual First, AI When Needed)

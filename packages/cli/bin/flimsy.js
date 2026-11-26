@@ -35,7 +35,7 @@ if (command === 'mcp' && !values.help && !values.version) {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
       console.log(`v${pkg.version}`);
     } catch {
-      console.log('v0.3.0');
+      console.log('v0.4.0');
     }
     process.exit(0);
   }

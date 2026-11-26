@@ -6,3 +6,5 @@ dist
 coverage
 .wireit
 
+
+packages/vite-plugin/src/client-script.generated.ts
