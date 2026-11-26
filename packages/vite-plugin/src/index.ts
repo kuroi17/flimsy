@@ -7,6 +7,7 @@ import {
   extractJSXSnippets,
   extractAIElementContext,
   resolveDesignHeuristic,
+  writeSelectionState,
 } from 'flimsy-core';
 import { clientScript } from './client-script.js';
 
@@ -108,6 +109,31 @@ export function flimsy(options: FlimsyOptions = {}): Plugin {
               );
             } catch (err: any) {
               res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+          });
+          return;
+        }
+
+        if (req.url === '/__flimsy/api/selection' && req.method === 'POST') {
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const data = JSON.parse(body);
+              if (data.primary && data.primary.file) {
+                await writeSelectionState(root, {
+                  primary: data.primary,
+                  targets: Array.isArray(data.targets) ? data.targets : [data.primary],
+                });
+              }
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: true }));
+            } catch (err: any) {
+              res.statusCode = 400;
               res.setHeader('Content-Type', 'application/json');
               res.end(JSON.stringify({ success: false, error: err.message }));
             }

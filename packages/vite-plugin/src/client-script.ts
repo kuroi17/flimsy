@@ -3848,6 +3848,27 @@ export const clientScript = `
 
     checkFileMtime(file, selectedTarget);
 
+    // Bridge active browser selection to local MCP server (best-effort, non-blocking)
+    try {
+      const toSelectionTarget = (el) => ({
+        file: el.getAttribute('data-flimsy-file') || '',
+        line: parseInt(el.getAttribute('data-flimsy-line') || '0', 10),
+        col: parseInt(el.getAttribute('data-flimsy-col') || '0', 10),
+        tagName: el.getAttribute('data-flimsy-name') || el.tagName.toLowerCase(),
+        componentName: el.getAttribute('data-flimsy-comp') || '',
+        classes: el.className || '',
+        text: isTextElement(el) ? (el.innerText || '').trim() : '',
+      });
+      fetch('/__flimsy/api/selection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          primary: toSelectionTarget(selectedTarget),
+          targets: selectedTargets.map(toSelectionTarget),
+        }),
+      }).catch(() => {});
+    } catch {}
+
     textInput.value = pendingText !== null ? pendingText : originalText;
     classesRawInput.value = pendingClasses;
     updateActiveSegmentedUI(pendingClasses);

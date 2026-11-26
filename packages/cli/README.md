@@ -81,6 +81,27 @@ Start your normal Vite dev server:
 npm run dev
 ```
 
+### Option 3: Optional MCP Server (Manual First, AI When Needed)
+
+Flimsy ships an opt-in, zero-bloat stdio MCP server (`flimsy-dev mcp`) for Cursor, Claude Code, or Antigravity when you want an AI agent to inspect or edit the exact element you selected in the browser:
+
+```json
+{
+  "mcpServers": {
+    "flimsy": {
+      "command": "npx",
+      "args": ["-y", "flimsy-dev@latest", "mcp", "--root", "/path/to/your/project"]
+    }
+  }
+}
+```
+
+Exposed MCP tools:
+- `flimsy_get_selection` — Reads the currently selected element(s) from your live Flimsy browser session (file, line, column, JSX snippet, Tailwind classes, text), or inspects any explicit `{ file, line, col }`.
+- `flimsy_update_classes` — Reconciles Tailwind classes deterministically via Flimsy AST (preserving `cn()`, `clsx()`, and formatting).
+- `flimsy_update_text` — Updates element text content while preserving inline JSX expressions.
+- `flimsy_paste_elements` — Inserts validated JSX snippets `after` or `inside` a target element.
+
 ---
 
 ## Shortcuts & Studio Controls

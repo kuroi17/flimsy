@@ -4,6 +4,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { flimsy } from '../src/index.js';
+import { readSelectionState } from 'flimsy-core';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const playgroundRoot = path.resolve(__dirname, '../../../examples/playground');
@@ -75,6 +76,7 @@ describe('Vite Plugin Round-trip Integration', () => {
     expect(script).toContain('flimsy-pos-x-input');
     expect(script).toContain('flimsy-pos-y-input');
     expect(script).toContain('/__flimsy/api/copy');
+    expect(script).toContain('/__flimsy/api/selection');
     expect(script).toContain('paste-elements');
     expect(script).toContain('selectAllElements');
   });
@@ -233,6 +235,22 @@ describe('Vite Plugin Round-trip Integration', () => {
     const disk = await fs.readFile(heroFilePath, 'utf-8');
     expect(disk.match(/<h1/g)?.length).toBe(2);
     expect(disk.match(/<p/g)?.length).toBe(2);
+  });
+
+  it('bridges live browser selection via /__flimsy/api/selection for MCP clients', async () => {
+    const selRes = await fetch(`${serverUrl}/__flimsy/api/selection`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        primary: { file: 'src/components/Hero.tsx', line: 9, col: 6, tagName: 'h1', componentName: 'Hero' },
+        targets: [{ file: 'src/components/Hero.tsx', line: 9, col: 6, tagName: 'h1', componentName: 'Hero' }],
+      }),
+    });
+    expect(selRes.status).toBe(200);
+    const saved = await readSelectionState(playgroundRoot);
+    expect(saved).not.toBeNull();
+    expect(saved?.primary.file).toBe('src/components/Hero.tsx');
+    expect(saved?.primary.line).toBe(9);
   });
 
   it('provides AI context packaging and offline heuristics at /__flimsy/api/ai', async () => {

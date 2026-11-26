@@ -37,6 +37,7 @@ await build({
   entryPoints: [
     path.join(__dirname, 'src/index.ts'),
     path.join(__dirname, 'src/vite.ts'),
+    path.join(__dirname, 'src/mcp.ts'),
   ],
   outdir: distDir,
   bundle: true,
