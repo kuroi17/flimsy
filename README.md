@@ -102,6 +102,14 @@ Exposed MCP tools:
 - `flimsy_update_text` — Updates element text content while preserving inline JSX expressions.
 - `flimsy_paste_elements` — Inserts validated JSX snippets `after` or `inside` a target element.
 
+### Option 4: Install Agent Skill (`npx skills`)
+
+Teach Claude Code, Cursor, Codex, or Antigravity how to launch Flimsy and consume live browser selections:
+
+```bash
+npx skills add kuroi17/flimsy
+```
+
 ---
 
 ## Shortcuts & Studio Controls

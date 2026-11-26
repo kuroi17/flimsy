@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/logo.jpg" alt="Flimsy Logo" width="140" />
+  <img src="https://cdn.jsdelivr.net/npm/flimsy-dev@0.2.0/assets/logo.jpg" alt="Flimsy Logo" width="140" />
 </p>
 
 <h1 align="center">Flimsy</h1>
@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/flimsy-dev"><img src="https://img.shields.io/npm/v/flimsy-dev.svg" alt="npm version" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
+  <a href="https://github.com/kuroi17/flimsy/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
   <a href="#privacy--local-first-guarantee"><img src="https://img.shields.io/badge/telemetry-none-brightgreen.svg" alt="Zero Telemetry" /></a>
 </p>
 
@@ -101,6 +101,14 @@ Exposed MCP tools:
 - `flimsy_update_classes` — Reconciles Tailwind classes deterministically via Flimsy AST (preserving `cn()`, `clsx()`, and formatting).
 - `flimsy_update_text` — Updates element text content while preserving inline JSX expressions.
 - `flimsy_paste_elements` — Inserts validated JSX snippets `after` or `inside` a target element.
+
+### Option 4: Install Agent Skill (`npx skills`)
+
+Teach Claude Code, Cursor, Codex, or Antigravity how to launch Flimsy and consume live browser selections:
+
+```bash
+npx skills add kuroi17/flimsy
+```
 
 ---
 

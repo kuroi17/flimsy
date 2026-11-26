@@ -7,7 +7,7 @@ import {
 
 const MCP_SERVER_INFO = {
   name: 'flimsy',
-  version: '0.1.3',
+  version: '0.2.0',
 };
 
 const MCP_TOOLS = [
