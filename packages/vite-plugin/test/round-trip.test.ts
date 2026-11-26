@@ -76,6 +76,7 @@ describe('Vite Plugin Round-trip Integration', () => {
     expect(script).toContain('flimsy-pos-y-input');
     expect(script).toContain('/__flimsy/api/copy');
     expect(script).toContain('paste-elements');
+    expect(script).toContain('selectAllElements');
   });
 
   it('inspects file metadata at /__flimsy/api/inspect', async () => {

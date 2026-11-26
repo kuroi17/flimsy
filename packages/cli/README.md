@@ -17,20 +17,21 @@
 
 ---
 
-**Flimsy** embeds an isolated, glassmorphic visual studio directly on your running Vite localhost server. Edit Tailwind spacing, typography, layout, colors, and inline text directly in the browser, preview the exact diff, and write deterministic AST changes straight back into your `.tsx` source files with zero AI token overhead.
+**Flimsy** embeds an isolated, glassmorphic visual studio directly on your running Vite localhost server. Move, resize, scale, style, duplicate, and reparent React/Tailwind elements directly in the browser, preview the exact diff, and write deterministic AST changes straight back into your `.tsx` source files with zero AI token overhead.
 
-## Why Flimsy
+## Key Capabilities
 
-- **Zero AI Tokens for Standard Visual Edits:** Modifies your `.tsx` files directly via deterministic AST reconciliation (`recast` + `magic-string`), preserving formatting, comments, and dynamic expressions.
-- **Minimalist Floating Studio:** Frosted glass dock, collapsible Layers tree, and compact Inspector inspired by Figma's spatial clarity.
-- **Isolated Shadow DOM:** Mounted inside an open Shadow DOM host so Flimsy styles never bleed into or break your application CSS.
-- **Smart Tailwind Conflict Resolution:** Category-aware reconciliation (`p-6` cleanly overrides `px-4 py-2`, `text-sm` never collides with `text-white` or `dark:` variants).
-- **Compatible with `cn()`, `clsx()`, and Template Literals:** Safely edits utility helper calls and dynamic class expressions without stripping logic.
-- **Optional Zero-Token AI Assist:** Collapsible heuristic style presets plus one-click context-aware prompt packaging for Cursor or Claude Code.
+- **Zero AI Tokens for Standard Visual Edits:** Writes directly to your `.tsx` files via deterministic AST reconciliation (`recast` + `magic-string`), preserving formatting, comments, and dynamic expressions.
+- **Figma-Style Direct Manipulation:** Freeform canvas drag-to-move (`Rel` / `Abs`), 8-point resize with aspect-ratio lock (`Shift`), Canva/Figma corner text scaling, rotation handle, `Alt` distance measurement guides, and `Alt + Drag` live DOM reparenting.
+- **Viewport Zoom & Pan Camera:** Smooth cursor-anchored zoom (`Ctrl + Scroll` / pinch, `25%–300%`) and canvas panning (`Space + Drag`, Hand tool `H`, middle-mouse drag) without polluting user source code.
+- **Multi-Select & Group Copy/Paste:** Marquee select, `Shift + Click`, or `Ctrl + A` to select sibling elements/frames, then drag, style, or `Ctrl + C` / `Ctrl + V` cloned JSX cleanly into target `.tsx` files.
+- **Full Visual Studio Controls:** 2D HSV rainbow color picker with alpha + eyedropper (Fill, Text, Stroke), searchable Google Fonts picker, Auto Layout alignment matrix, individual border sides & corners, opacity, and collapsible Layers tree with drag-and-drop reparenting.
+- **Isolated Shadow DOM & Tailwind Reconciliation:** Mounted in an open Shadow DOM so Flimsy styles never leak into your app; works seamlessly with `cn()`, `clsx()`, and template literal `className` expressions.
+- **Optional Zero-Token AI Assist:** Collapsible offline heuristic presets plus one-click context-aware prompt packaging for Cursor, Claude Code, or other coding agents.
 
 ---
 
-## Quickstart
+## Installation & Quickstart
 
 ### Option 1: Zero-Install CLI (`npx`)
 
@@ -49,7 +50,7 @@ npx flimsy-dev@latest dev --host        # Expose server on local network
 npx flimsy-dev@latest --version       # Check CLI version
 ```
 
-### Option 2: Install as a Dev Dependency
+### Option 2: Install as a Dev Dependency (`npm` / `pnpm`)
 
 Install the unified `flimsy-dev` package (includes CLI, Vite plugin, and AST engine):
 
@@ -74,7 +75,7 @@ export default defineConfig({
 });
 ```
 
-Start your normal Vite server:
+Start your normal Vite dev server:
 
 ```bash
 npm run dev
@@ -87,11 +88,23 @@ npm run dev
 | Shortcut / Action | Behavior |
 |---|---|
 | `Alt + X` | Toggle visual inspection mode on or off anywhere on the page. |
-| `Esc` | Deselect active element, or close inspection mode when idle. |
-| `Double-Click` | Edit element text directly inline (`contentEditable`) on the live page. |
-| `Ctrl + Z` / `Cmd + Z` | Undo the last visual modification in your current session. |
-| `Ctrl + Y` / `Cmd + Shift + Z` | Redo a previously undone modification. |
-| Bottom Floating Pill | Switch inspect cursor, inline text tool, Layers tree, AI Assist, and Undo/Redo. |
+| `V` / `H` | Switch between Select cursor (`V`) and Hand pan tool (`H`). |
+| `Space + Drag` / Middle-Click | Temporarily pan the viewport horizontally and vertically. |
+| `Ctrl + Scroll` / Pinch | Zoom in or out anchored to the cursor (`25%–300%`). |
+| `Ctrl + =` / `Ctrl + -` / `Ctrl + 0` | Zoom in, zoom out, or reset viewport to `100%`. |
+| `Drag Element` (`Shift` lock) | Move selected element(s) on canvas (`Rel` translate or `Abs` left/top). |
+| `Alt + Drag Element` | Live canvas DOM reparenting (move before, after, or inside a container). |
+| `Corner Drag` (`Shift` ratio) | Resize boxes or pull text corners to scale font size directly. |
+| `Arrow Keys` (`Shift` 10px) | Nudge selected element(s) by `1px` or `10px`. |
+| `Alt + Hover` | Show pixel distance measurement guides to surrounding elements. |
+| `Shift + Click` / Marquee Drag | Select multiple elements for batch styling, dragging, or copy/paste. |
+| `Ctrl + A` / `Cmd + A` | Select all sibling elements in the current container (press again to expand up). |
+| `Ctrl + C` / `Ctrl + V` | Copy and paste selected element(s) as clean JSX synced into `.tsx` via HMR. |
+| `Ctrl + D` / `Delete` | Duplicate or delete selected JSX element directly in AST. |
+| `Double-Click` | Edit element text inline (`contentEditable`) on the live page. |
+| `Shift + S` / `Ctrl + S` | Commit all pending visual edits atomically to `.tsx` source files. |
+| `Ctrl + Z` / `Ctrl + Y` | Undo or redo visual changes in the current session. |
+| `Esc` | Close active popover, deselect element(s), or exit inspect mode. |
 
 ---
 
@@ -105,11 +118,11 @@ npm run dev
 
 ## Architecture
 
-Published as one unified package (**[`flimsy-dev`](packages/cli)**) bundling:
+Published as one unified npm package (**[`flimsy-dev`](https://www.npmjs.com/package/flimsy-dev)**) bundling:
 
-- **CLI Runner (`npx flimsy-dev dev`):** Zero-config development launcher ([`packages/cli`](packages/cli)).
-- **Vite Plugin (`flimsy-dev/vite`):** Development server plugin, Shadow DOM visual studio, and update API ([`packages/vite-plugin`](packages/vite-plugin)).
-- **AST Sync Engine:** JSX source coordinate injector (`magic-string`), deterministic file reconciler (`recast`), and external edit conflict guard ([`packages/core`](packages/core)).
+- **CLI Runner (`npx flimsy-dev dev`):** Zero-config development launcher.
+- **Vite Plugin (`flimsy-dev/vite`):** Development server plugin, Shadow DOM visual studio, and live sync API.
+- **AST Sync Engine:** JSX source coordinate injector (`magic-string`), deterministic file reconciler (`recast`), snippet extractor, and external edit conflict guard.
 
 ---
 
