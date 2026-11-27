@@ -9,6 +9,7 @@ import {
 } from './markup-parser.js';
 import type { InjectOptions, UpdateAction } from './types.js';
 import type { AIContextOptions, ElementAIContext } from './ai.js';
+import { buildInsertElementSnippet } from './presets.js';
 
 type ReconcileFn = (
   existingClasses: string,
@@ -273,6 +274,42 @@ function applySingleMarkupAction(
 
     const block = cleanSnippets.map((sn) => `\n${indent}${sn}`).join('');
     s.appendRight(el.end, block);
+    return { code: s.toString() };
+  }
+
+  if (action.type === 'insert-element') {
+    const snippet = buildInsertElementSnippet(action.preset, {
+      attrName: 'class',
+      text: action.text,
+      classes: action.classes,
+      src: action.src,
+      alt: action.alt,
+    });
+    const indent = getLineIndent(code, el.start);
+    const effectivePos = action.position === 'inside' && el.isVoid ? 'after' : action.position;
+
+    if (effectivePos === 'inside') {
+      if (el.selfClosing) {
+        const openWithoutSelfClose = code
+          .slice(el.openStart, el.openEnd)
+          .replace(/\s*\/\s*>$/, '>');
+        s.overwrite(
+          el.openStart,
+          el.openEnd,
+          `${openWithoutSelfClose}\n${indent}  ${snippet}\n${indent}</${el.tagName}>`
+        );
+      } else {
+        s.appendLeft(el.closeStart, `\n${indent}  ${snippet}\n${indent}`);
+      }
+      return { code: s.toString() };
+    }
+
+    if (effectivePos === 'before') {
+      s.appendLeft(el.start, `${snippet}\n${indent}`);
+      return { code: s.toString() };
+    }
+
+    s.appendRight(el.end, `\n${indent}${snippet}`);
     return { code: s.toString() };
   }
 

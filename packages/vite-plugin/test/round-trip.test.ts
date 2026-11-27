@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer, type ViteDevServer } from 'vite';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { flimsy } from '../src/index.js';
 import { readSelectionState } from 'flimsy-core';
@@ -78,6 +79,14 @@ describe('Vite Plugin Round-trip Integration', () => {
     expect(script).toContain('/__flimsy/api/copy');
     expect(script).toContain('/__flimsy/api/selection');
     expect(script).toContain('paste-elements');
+    expect(script).toContain('insert-element');
+    expect(script).toContain('flimsy-insert-btn');
+    expect(script).toContain('flimsy-insert-popover');
+    expect(script).toContain('flimsy-vp-tablet');
+    expect(script).toContain('flimsy-vp-mobile');
+    expect(script).toContain('seg-variant-bp');
+    expect(script).toContain('seg-variant-state');
+    expect(script).toContain('flimsy-variant-dark');
     expect(script).toContain('selectAllElements');
   });
 
@@ -144,8 +153,9 @@ describe('Vite Plugin Round-trip Integration', () => {
   });
 
   it('handles atomic batch updates for multi-selected elements in the same file', async () => {
-    // Restore clean Hero first
+    // Restore clean Hero first and clear Vite module cache so transformed line numbers match disk
     await fs.writeFile(heroFilePath, originalHeroContent, 'utf-8');
+    server?.moduleGraph.invalidateAll();
     const resModule = await fetch(`${serverUrl}/src/components/Hero.tsx`);
     const code = await resModule.text();
 
@@ -188,6 +198,7 @@ describe('Vite Plugin Round-trip Integration', () => {
 
   it('copies a multi-element group via /__flimsy/api/copy and pastes it via paste-elements', async () => {
     await fs.writeFile(heroFilePath, originalHeroContent, 'utf-8');
+    server?.moduleGraph.invalidateAll();
     const resModule = await fetch(`${serverUrl}/src/components/Hero.tsx`);
     const code = await resModule.text();
 
@@ -283,6 +294,8 @@ describe('Vite Plugin Round-trip Integration', () => {
   });
 
   it('provides AI context packaging and offline heuristics at /__flimsy/api/ai', async () => {
+    await fs.writeFile(heroFilePath, originalHeroContent, 'utf-8');
+    server?.moduleGraph.invalidateAll();
     const resModule = await fetch(`${serverUrl}/src/components/Hero.tsx`);
     const code = await resModule.text();
 
@@ -328,6 +341,112 @@ describe('Vite Plugin Round-trip Integration', () => {
         dupServer.close(),
         new Promise((resolve) => setTimeout(resolve, 500)),
       ]);
+    }
+  });
+
+  it('inserts new elements and syncs responsive/state variants over live Vite dev server (TSX + Vue + Svelte + HTML + Tailwind v4)', async () => {
+    const tempApp = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'flimsy-e2e-multi-')));
+    await fs.mkdir(path.join(tempApp, 'src'), { recursive: true });
+    await fs.writeFile(
+      path.join(tempApp, 'index.html'),
+      `<!doctype html><html><head><link rel="stylesheet" href="/src/app.css"></head><body><main class="p-6"><h1 class="text-2xl">Static</h1></main></body></html>\n`,
+      'utf-8'
+    );
+    // Tailwind v4 CSS-first entry with @theme token
+    await fs.writeFile(
+      path.join(tempApp, 'src/app.css'),
+      `@import "tailwindcss";\n@theme { --color-brand: #0ea5e9; }\n`,
+      'utf-8'
+    );
+    await fs.writeFile(
+      path.join(tempApp, 'src/Card.vue'),
+      `<template>\n  <section class="p-4 bg-white">\n    <h2 class="text-xl">Vue Card</h2>\n  </section>\n</template>\n`,
+      'utf-8'
+    );
+    await fs.writeFile(
+      path.join(tempApp, 'src/Widget.svelte'),
+      `<div class="p-4 bg-zinc-50">\n  <button class="px-3 py-1 bg-zinc-900 text-white">Go</button>\n</div>\n`,
+      'utf-8'
+    );
+
+    const multiServer = await createServer({
+      root: tempApp,
+      configFile: false,
+      server: { port: 5196, host: '127.0.0.1', fs: { strict: false } },
+      plugins: [flimsy()],
+    });
+    await multiServer.listen();
+    const base = 'http://127.0.0.1:5196';
+
+    try {
+      // 1. HTML stamped + script injected
+      const htmlRes = await fetch(`${base}/`);
+      expect(htmlRes.status).toBe(200);
+      const html = await htmlRes.text();
+      expect(html).toContain('data-flimsy-file="index.html"');
+      expect(html).toContain('/@flimsy/client.js');
+
+      // 2. Insert new button inside Vue <section>
+      const vueIns = await fetch(`${base}/__flimsy/api/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          file: 'src/Card.vue',
+          line: 2,
+          col: 2,
+          force: true,
+          action: { type: 'insert-element', preset: 'button', position: 'inside', text: 'Vue CTA' },
+        }),
+      });
+      expect((await vueIns.json()).success).toBe(true);
+      const vueDisk = await fs.readFile(path.join(tempApp, 'src/Card.vue'), 'utf-8');
+      expect(vueDisk).toContain('>Vue CTA</button>');
+
+      // 3. Apply responsive + hover + dark variant classes to Svelte button
+      const svelteUp = await fetch(`${base}/__flimsy/api/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          file: 'src/Widget.svelte',
+          line: 2,
+          col: 2,
+          force: true,
+          action: {
+            type: 'update-class',
+            newClasses: 'md:px-6 hover:bg-[#0ea5e9] dark:bg-white dark:text-black',
+            mode: 'reconcile',
+          },
+        }),
+      });
+      expect((await svelteUp.json()).success).toBe(true);
+      const svelteDisk = await fs.readFile(path.join(tempApp, 'src/Widget.svelte'), 'utf-8');
+      expect(svelteDisk).toContain('px-3');
+      expect(svelteDisk).toContain('md:px-6');
+      expect(svelteDisk).toContain('hover:bg-[#0ea5e9]');
+      expect(svelteDisk).toContain('dark:bg-white');
+
+      // 4. Insert box into Vanilla HTML <main>
+      const htmlIns = await fetch(`${base}/__flimsy/api/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          file: 'index.html',
+          line: 1,
+          col: 72,
+          force: true,
+          action: { type: 'insert-element', preset: 'box', position: 'inside' },
+        }),
+      });
+      expect((await htmlIns.json()).success).toBe(true);
+      const htmlDisk = await fs.readFile(path.join(tempApp, 'index.html'), 'utf-8');
+      expect(htmlDisk).toContain('<div class="p-6 rounded-xl bg-zinc-100 border border-zinc-200 min-h-[80px]"></div>');
+    } finally {
+      multiServer.httpServer?.closeAllConnections?.();
+      await Promise.race([
+        multiServer.close(),
+        new Promise((resolve) => setTimeout(resolve, 500)),
+      ]);
+      await fs.rm(tempApp, { recursive: true, force: true });
     }
   });
 });

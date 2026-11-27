@@ -253,6 +253,89 @@ export function buildPreviewRule(cls) {
   return null;
 }
 
+export const TW_BREAKPOINTS: Record<string, number> = {
+  sm: 640,
+  md: 768,
+  lg: 1024,
+  xl: 1280,
+  '2xl': 1536,
+};
+
+export function composeVariantPrefix(bp: string, state: string, isDark: boolean): string {
+  return [bp, isDark ? 'dark' : '', state].filter(Boolean).join(':');
+}
+
+export function prefixClassWithVariant(cls: string, variantPrefix: string): string {
+  if (!cls || !variantPrefix) return cls;
+  // Do not double-prefix classes that already carry explicit variant prefixes
+  if (cls.includes(':')) return cls;
+  return variantPrefix + ':' + cls;
+}
+
+function escapeCssIdent(cls: string): string {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+    return CSS.escape(cls);
+  }
+  return cls.replace(/([!"#$%&'()*+,./:;<=>?@[\\\]^`{|}~])/g, '\\$1');
+}
+
+/**
+ * Generates complete CSS rule(s) for both unprefixed and variant-prefixed Tailwind classes
+ * (`sm:`, `md:`, `lg:`, `xl:`, `2xl:`, `hover:`, `focus:`, `dark:`), including Flimsy studio
+ * live-preview attribute hooks so active breakpoint/hover/dark edits render immediately.
+ */
+export function buildPreviewCssRule(cls: string): string | null {
+  if (!cls) return null;
+  const parts = cls.split(':');
+  const base = parts[parts.length - 1];
+  const variants = parts.slice(0, -1);
+
+  const body = buildPreviewRule(base);
+  if (!body) return null;
+
+  const esc = escapeCssIdent(cls);
+  if (variants.length === 0) {
+    return '[data-flimsy-file].' + esc + ' { ' + body + ' }\n';
+  }
+
+  let bp: string | null = null;
+  let isDark = false;
+  let isHover = false;
+  let isFocus = false;
+
+  for (const v of variants) {
+    if (TW_BREAKPOINTS[v]) {
+      bp = v;
+    } else if (v === 'dark') {
+      isDark = true;
+    } else if (v === 'hover') {
+      isHover = true;
+    } else if (v === 'focus') {
+      isFocus = true;
+    } else {
+      return null;
+    }
+  }
+
+  const pseudo = (isHover ? ':hover' : '') + (isFocus ? ':focus' : '');
+  const realSel = (isDark ? '.dark ' : '') + '[data-flimsy-file].' + esc + pseudo;
+  const realRule = bp
+    ? '@media (min-width: ' + TW_BREAKPOINTS[bp] + 'px) { ' + realSel + ' { ' + body + ' } }\n'
+    : realSel + ' { ' + body + ' }\n';
+
+  const htmlAttrs =
+    (bp ? '[data-flimsy-preview-bp~="' + bp + '"]' : '') +
+    (isDark ? '[data-flimsy-preview-dark="1"]' : '');
+  const elAttrs =
+    (isHover ? '[data-flimsy-preview-state~="hover"]' : '') +
+    (isFocus ? '[data-flimsy-preview-state~="focus"]' : '');
+  const previewSel =
+    (htmlAttrs ? 'html' + htmlAttrs + ' ' : '') + '[data-flimsy-file]' + elAttrs + '.' + esc;
+  const previewRule = previewSel + ' { ' + body + ' }\n';
+
+  return realRule + previewRule;
+}
+
 
 export function getClientClassCategory(base) {
   if (/^text-([0-9]?xl|xs|sm|base|lg|(\[\d+(?:\.\d+)?(px|rem|em)\]))$/.test(base)) return 'font-size';

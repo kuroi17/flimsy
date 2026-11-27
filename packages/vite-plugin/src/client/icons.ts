@@ -36,6 +36,13 @@ export const ICONS: Record<string, string> = {
     down: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5.8 8 4.2 4.2L14.2 8"/></svg>',
     compDiamond: '<svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 1.3 10.7 6 6 10.7 1.3 6 6 1.3Z" fill="currentColor" fill-opacity="0.24"/></svg>',
     frameBracket: '<svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round"><path d="M2 4.5V2.3h2.2"/><path d="M7.8 2.3H10v2.2"/><path d="M10 7.5v2.2H7.8"/><path d="M4.2 9.7H2V7.5"/></svg>',
+    // Insert Element Presets & Viewport Switcher Icons
+    box: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3.5" y="4.5" width="13" height="11" rx="2.4" fill="currentColor" fill-opacity="0.14"/></svg>',
+    buttonEl: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2.8" y="6" width="14.4" height="8" rx="4" fill="currentColor" fill-opacity="0.14"/><path d="M7.5 10h5"/></svg>',
+    image: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="4.2" width="13.6" height="11.6" rx="2.2" fill="currentColor" fill-opacity="0.10"/><circle cx="7.4" cy="8.1" r="1.2" fill="currentColor" stroke="none"/><path d="m4.2 14 3.7-3.4 2.8 2.6 2-1.8 3.1 2.6"/></svg>',
+    desktop: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><rect x="2.8" y="3.8" width="14.4" height="9.6" rx="1.8" fill="currentColor" fill-opacity="0.12"/><path d="M7.2 16.4h5.6"/><path d="M10 13.4v3"/></svg>',
+    tablet: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="2.8" width="11" height="14.4" rx="2" fill="currentColor" fill-opacity="0.12"/><path d="M9.2 14.6h1.6"/></svg>',
+    mobile: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.8" width="8" height="14.4" rx="1.8" fill="currentColor" fill-opacity="0.12"/><path d="M9.2 14.6h1.6"/></svg>',
   };
 
 export interface FontOption {

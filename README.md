@@ -11,6 +11,7 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/flimsy-dev"><img src="https://img.shields.io/npm/v/flimsy-dev.svg" alt="npm version" /></a>
+  <a href="https://github.com/kuroi17/flimsy/actions/workflows/ci.yml"><img src="https://github.com/kuroi17/flimsy/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
   <a href="#privacy--local-first-guarantee"><img src="https://img.shields.io/badge/telemetry-none-brightgreen.svg" alt="Zero Telemetry" /></a>
 </p>
@@ -25,7 +26,9 @@
 
 ## Key Capabilities
 
-- **Multi-Language Frontend Support:** Works deterministically across **React, Preact, SolidJS, Qwik, Vue JSX** (`.tsx`/`.jsx` with `className` and `class`), **Vue SFC** (`.vue`), **Svelte** (`.svelte`), **Astro** (`.astro`), and **Vanilla HTML / Angular / HTMX / Alpine** (`.html`/`.htm`). See [`LANGUAGE_SCALING_PLAN.md`](LANGUAGE_SCALING_PLAN.md).
+- **Multi-Language Frontend Support:** Works deterministically across **React, Next.js, Preact, SolidJS, Qwik, Vue JSX** (`.tsx`/`.jsx` with `className` and `class`), **Vue SFC** (`.vue`), **Svelte** (`.svelte`), **Astro** (`.astro`), and **Vanilla HTML / Angular / HTMX / Alpine** (`.html`/`.htm`). See [`LANGUAGE_SCALING_PLAN.md`](LANGUAGE_SCALING_PLAN.md).
+- **Insert & Delete Elements From Scratch:** Drop new starter elements (`Box`, `Text`, `Button`, `Image`) `Inside` or `After` any container from the `+` dock popover (`I`) or Layers panel, and write clean syntax-validated markup straight into your source files.
+- **Responsive Viewport & State Variant Editing:** Switch between `Full`, `Tablet (768px)`, and `Mobile (390px)` preview frames and target `Base`, `sm:`, `md:`, `lg:`, `hover:`, `focus:`, and `dark:` Tailwind variants with live optimistic preview and variant-isolated reconciliation.
 - **Zero AI Tokens for Standard Visual Edits:** Writes directly to your source files via deterministic AST & span reconciliation (`recast` + `magic-string`), preserving formatting, comments, directives, and dynamic expressions.
 - **Figma-Style Direct Manipulation:** Freeform canvas drag-to-move (`Rel` / `Abs`), 8-point resize with aspect-ratio lock (`Shift`), Canva/Figma corner text scaling, rotation handle, `Alt` distance measurement guides, and `Alt + Drag` live DOM reparenting.
 - **Viewport Zoom & Pan Camera:** Smooth cursor-anchored zoom (`Ctrl + Scroll` / pinch, `25%–300%`) and canvas panning (`Space + Drag`, Hand tool `H`, middle-mouse drag) without polluting user source code.
@@ -119,6 +122,7 @@ Exposed MCP tools:
 - `flimsy_update_classes` — Reconciles Tailwind classes deterministically via Flimsy AST (preserving `cn()`, `clsx()`, and formatting).
 - `flimsy_update_text` — Updates element text content while preserving inline JSX expressions.
 - `flimsy_paste_elements` — Inserts validated JSX snippets `after` or `inside` a target element.
+- `flimsy_insert_element` — Creates and inserts starter elements (`box`, `text`, `button`, `image`) `inside`, `after`, or `before` a target element across JSX, Vue, Svelte, Astro, and HTML.
 
 ### Option 4: Install Agent Skill (`npx skills`)
 
@@ -135,7 +139,7 @@ npx skills add kuroi17/flimsy
 | Shortcut / Action | Behavior |
 |---|---|
 | `Alt + X` | Toggle visual inspection mode on or off anywhere on the page. |
-| `V` / `H` | Switch between Select cursor (`V`) and Hand pan tool (`H`). |
+| `V` / `H` / `I` | Switch between Select cursor (`V`), Hand pan tool (`H`), or Insert Element popover (`I`). |
 | `Space + Drag` / Middle-Click | Temporarily pan the viewport horizontally and vertically. |
 | `Ctrl + Scroll` / Pinch | Zoom in or out anchored to the cursor (`25%–300%`). |
 | `Ctrl + =` / `Ctrl + -` / `Ctrl + 0` | Zoom in, zoom out, or reset viewport to `100%`. |

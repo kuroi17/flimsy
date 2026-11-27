@@ -4,11 +4,42 @@ import * as recast from 'recast';
 import * as babelParser from '@babel/parser';
 import traversePkg from '@babel/traverse';
 import type { UpdateAction, UpdateResult, UpdateSourceOptions } from './types.js';
+import { buildInsertElementSnippet } from './presets.js';
 import { detectLanguage, isMarkupLanguage } from './languages.js';
 import { applyMarkupActions, extractMarkupSnippets } from './markup-updater.js';
 
 const traverse = (traversePkg as any).default || traversePkg;
 const b = recast.types.builders;
+
+const JSX_VOID_TAGS = new Set([
+  'img',
+  'input',
+  'br',
+  'hr',
+  'meta',
+  'link',
+  'area',
+  'base',
+  'col',
+  'embed',
+  'source',
+  'track',
+  'wbr',
+]);
+
+function detectJsxClassAttrName(ast: any): 'class' | 'className' {
+  let classCount = 0;
+  let classNameCount = 0;
+  if (ast) {
+    traverse(ast, {
+      JSXAttribute(p: any) {
+        if (p.node?.name?.name === 'class') classCount++;
+        else if (p.node?.name?.name === 'className') classNameCount++;
+      },
+    });
+  }
+  return classCount > classNameCount ? 'class' : 'className';
+}
 
 export async function extractJSXSnippets(
   targets: Array<{ filePath: string; line: number; column: number }>,
@@ -469,6 +500,52 @@ function applyAction(
     return;
   }
 
+  if (action.type === 'insert-element') {
+    const attrName = detectJsxClassAttrName(ast);
+    const snippet = buildInsertElementSnippet(action.preset, {
+      attrName,
+      text: action.text,
+      classes: action.classes,
+      src: action.src,
+      alt: action.alt,
+    });
+    const newNode = parseJSXSnippetNode(snippet);
+    if (!newNode) return;
+
+    const rawTag =
+      openingNode?.name?.type === 'JSXIdentifier'
+        ? openingNode.name.name.toLowerCase()
+        : '';
+    const effectivePos =
+      action.position === 'inside' && JSX_VOID_TAGS.has(rawTag)
+        ? 'after'
+        : action.position;
+
+    if (effectivePos === 'inside') {
+      if (elementNode.openingElement?.selfClosing) {
+        elementNode.openingElement.selfClosing = false;
+        elementNode.closingElement = b.jsxClosingElement(elementNode.openingElement.name);
+      }
+      if (!Array.isArray(elementNode.children)) {
+        elementNode.children = [];
+      }
+      elementNode.children.push(b.jsxText('\n'));
+      elementNode.children.push(newNode);
+      elementNode.children.push(b.jsxText('\n'));
+    } else if (targetPathNode?.parent && Array.isArray(targetPathNode.parent.children)) {
+      const children = targetPathNode.parent.children;
+      const idx = children.indexOf(targetPathNode.node);
+      if (idx !== -1) {
+        if (effectivePos === 'before') {
+          children.splice(idx, 0, newNode, b.jsxText('\n'));
+        } else {
+          children.splice(idx + 1, 0, b.jsxText('\n'), newNode);
+        }
+      }
+    }
+    return;
+  }
+
   if (action.type === 'duplicate-element') {
     if (targetPathNode && typeof targetPathNode.insertAfter === 'function') {
       try {
@@ -641,17 +718,7 @@ function applyAction(
       }
     } else {
       // Detect whether this JSX file uses `class=` (SolidJS/Preact/Qwik/Vue JSX) or `className=` (React)
-      let classCount = 0;
-      let classNameCount = 0;
-      if (ast) {
-        traverse(ast, {
-          JSXAttribute(p: any) {
-            if (p.node?.name?.name === 'class') classCount++;
-            else if (p.node?.name?.name === 'className') classNameCount++;
-          },
-        });
-      }
-      const attrName = classCount > classNameCount ? 'class' : 'className';
+      const attrName = detectJsxClassAttrName(ast);
 
       if (!openingNode.attributes) {
         openingNode.attributes = [];
@@ -686,20 +753,30 @@ export function reconcileClasses(
   let filtered = existingTokens.filter((token) => !removeSet.has(token));
 
   if (mode === 'reconcile') {
-    // For each new class, detect if it conflicts with an existing class prefix
-    // (e.g., bg-*, p-*, text-*, rounded-*)
+    // For each new class, detect if it conflicts with an existing class prefix within the same variant scope
+    // (e.g., bg-*, p-*, text-*, md:p-* only replaces md:px-*, never base px-*)
+    const getVariant = (cls: string) => {
+      const idx = cls.lastIndexOf(':');
+      return idx === -1 ? '' : cls.slice(0, idx);
+    };
+
     for (const newClass of newTokens) {
       const prefix = getTailwindPropertyPrefix(newClass);
       if (prefix) {
-        const isMasterPadding = /^([^:]+:)?p-/.test(prefix) && !/^([^:]+:)?p[xytrbl]-/.test(prefix);
-        const isMasterMargin = /^([^:]+:)?m-/.test(prefix) && !/^([^:]+:)?m[xytrbl]-/.test(prefix);
+        const newVariant = getVariant(newClass);
+        const baseCat = newVariant ? prefix.slice(newVariant.length + 1) : prefix;
+        const isMasterPadding = baseCat === 'p-';
+        const isMasterMargin = baseCat === 'm-';
 
         filtered = filtered.filter((token) => {
           const tokenPrefix = getTailwindPropertyPrefix(token);
           if (!tokenPrefix) return true;
           if (tokenPrefix === prefix) return false;
-          if (isMasterPadding && /^([^:]+:)?p[xytrbl]-/.test(tokenPrefix)) return false;
-          if (isMasterMargin && /^([^:]+:)?m[xytrbl]-/.test(tokenPrefix)) return false;
+          if (getVariant(token) === newVariant) {
+            const tokenBaseCat = newVariant ? tokenPrefix.slice(newVariant.length + 1) : tokenPrefix;
+            if (isMasterPadding && /^p[xytrbl]-$/.test(tokenBaseCat)) return false;
+            if (isMasterMargin && /^m[xytrbl]-$/.test(tokenBaseCat)) return false;
+          }
           return true;
         });
       }

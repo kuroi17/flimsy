@@ -5,9 +5,14 @@ export function createDockHTML(): string {
     <button class="dock-tool dock-btn" data-tip="Select (V / Alt+X)" aria-label="Toggle Inspect">${ICONS.cursor}</button>
     <div class="dock-extra" id="flimsy-dock-extra" style="display:none;">
       <button class="dock-tool" id="flimsy-hand-tool" data-tip="Hand Pan (H / Space)" aria-label="Pan Canvas">${ICONS.hand}</button>
+      <button class="dock-tool" id="flimsy-insert-btn" data-tip="Insert Element (I)" aria-label="Insert Element">${ICONS.plus}</button>
       <button class="dock-tool" id="flimsy-text-tool" data-tip="Edit Text" aria-label="Edit Text">${ICONS.text}</button>
       <button class="dock-tool subtle-active" id="flimsy-layers-toggle" data-tip="Layers" aria-label="Toggle Layers">${ICONS.layers}</button>
       <button class="dock-tool subtle-active" id="flimsy-snap-toggle" data-tip="Snap to Scale (Ctrl bypass)" aria-label="Toggle Tailwind Snap">${ICONS.snap}</button>
+      <div class="dock-divider"></div>
+      <button class="dock-tool subtle-active" id="flimsy-vp-full" data-vp="full" data-tip="Desktop (Full)" aria-label="Desktop Viewport">${ICONS.desktop}</button>
+      <button class="dock-tool" id="flimsy-vp-tablet" data-vp="768" data-tip="Tablet (768px)" aria-label="Tablet Viewport">${ICONS.tablet}</button>
+      <button class="dock-tool" id="flimsy-vp-mobile" data-vp="390" data-tip="Mobile (390px)" aria-label="Mobile Viewport">${ICONS.mobile}</button>
       <div class="dock-divider"></div>
       <button class="dock-tool" id="flimsy-undo-btn" data-tip="Undo (Ctrl+Z)" aria-label="Undo" disabled>${ICONS.undo}</button>
       <button class="dock-tool" id="flimsy-redo-btn" data-tip="Redo (Ctrl+Y)" aria-label="Redo" disabled>${ICONS.redo}</button>
@@ -21,6 +26,36 @@ export function createDockHTML(): string {
       <span class="text">In sync</span>
     </div>
     <span class="dock-tool brand-mark" data-tip="Flimsy">${ICONS.brand}</span>
+  `;
+}
+
+export function createInsertPopoverHTML(): string {
+  return `
+    <div class="insert-header">
+      <span>Insert Element</span>
+      <div class="segmented" id="flimsy-insert-pos" style="width: 108px;">
+        <button class="seg-btn active" data-pos="inside" title="Insert inside container">Inside</button>
+        <button class="seg-btn" data-pos="after" title="Insert after element">After</button>
+      </div>
+    </div>
+    <div class="insert-grid">
+      <button class="insert-item" data-preset="box">
+        <span class="insert-icon">${ICONS.box}</span>
+        <span class="insert-label">Box</span>
+      </button>
+      <button class="insert-item" data-preset="text">
+        <span class="insert-icon">${ICONS.text}</span>
+        <span class="insert-label">Text</span>
+      </button>
+      <button class="insert-item" data-preset="button">
+        <span class="insert-icon">${ICONS.buttonEl}</span>
+        <span class="insert-label">Button</span>
+      </button>
+      <button class="insert-item" data-preset="image">
+        <span class="insert-icon">${ICONS.image}</span>
+        <span class="insert-label">Image</span>
+      </button>
+    </div>
   `;
 }
 
@@ -49,6 +84,7 @@ export function createLayersPanelHTML(): string {
     <div class="layers-header">
       <span>Layers</span>
       <div class="layers-header-actions">
+        <button class="icon-btn" id="flimsy-layers-insert" title="Insert Element (I)" aria-label="Insert Element">${ICONS.plus}</button>
         <button class="icon-btn" id="flimsy-layers-refresh" title="Refresh Tree" aria-label="Refresh Layers">${ICONS.refresh}</button>
         <button class="icon-btn" id="flimsy-layers-close" title="Hide Layers" aria-label="Hide Layers">${ICONS.close}</button>
       </div>
@@ -66,6 +102,30 @@ export function createInspectorPanelHTML(): string {
         <span class="instance-badge" id="flimsy-instance-badge"></span>
       </div>
       <button class="icon-btn" id="flimsy-close-btn" title="Close (Esc)" aria-label="Close Inspector">${ICONS.close}</button>
+    </div>
+
+    <!-- Responsive Breakpoint & State Variant Target -->
+    <div class="prop-section variant-section">
+      <div class="variant-row">
+        <div class="segmented" id="seg-variant-bp" style="flex:1;">
+          <button class="seg-btn active" data-bp="" title="Base unprefixed styles">Base</button>
+          <button class="seg-btn" data-bp="sm" title="Small breakpoint (>=640px)">sm:</button>
+          <button class="seg-btn" data-bp="md" title="Medium breakpoint (>=768px)">md:</button>
+          <button class="seg-btn" data-bp="lg" title="Large breakpoint (>=1024px)">lg:</button>
+        </div>
+      </div>
+      <div class="variant-row">
+        <div class="segmented" id="seg-variant-state" style="flex:1;">
+          <button class="seg-btn active" data-state="" title="Default state">Default</button>
+          <button class="seg-btn" data-state="hover" title="Hover state (hover:)">hover:</button>
+          <button class="seg-btn" data-state="focus" title="Focus state (focus:)">focus:</button>
+        </div>
+        <button class="pill-toggle" id="flimsy-variant-dark" title="Toggle dark: variant">dark:</button>
+      </div>
+      <div class="variant-indicator" id="flimsy-variant-indicator" style="display:none;">
+        <span id="flimsy-variant-label">Target: md:</span>
+        <button class="variant-reset-btn" id="flimsy-variant-reset" type="button">Base</button>
+      </div>
     </div>
 
     <!-- Inline Text Content -->

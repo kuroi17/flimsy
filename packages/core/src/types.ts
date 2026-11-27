@@ -1,3 +1,5 @@
+export type InsertElementPreset = 'box' | 'text' | 'button' | 'image';
+
 export type UpdateAction =
   | {
       type: 'update-text';
@@ -29,6 +31,15 @@ export type UpdateAction =
       type: 'paste-elements';
       snippets: string[];
       position: 'after' | 'inside';
+    }
+  | {
+      type: 'insert-element';
+      preset: InsertElementPreset;
+      position: 'inside' | 'after' | 'before';
+      text?: string;
+      classes?: string;
+      src?: string;
+      alt?: string;
     };
 
 export interface UpdateSourceOptions {

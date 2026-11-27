@@ -64,4 +64,5 @@ Register the built-in stdio MCP server in Cursor, Claude Code, or Antigravity:
    - `flimsy_update_classes` — reconciles Tailwind utility classes cleanly while preserving `cn()`, `clsx()`, comments, and formatting.
    - `flimsy_update_text` — updates visible text while preserving inline `{expressions}`.
    - `flimsy_paste_elements` — inserts Babel-validated JSX snippets `after` or `inside` the selected element.
+   - `flimsy_insert_element` — creates and inserts starter elements (`box`, `text`, `button`, `image`) `inside`, `after`, or `before` the selected element.
 3. Never inject `data-flimsy-*` attributes manually; the Vite plugin handles them in dev mode only and strips zero-footprint in production builds.

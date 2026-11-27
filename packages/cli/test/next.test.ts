@@ -121,7 +121,7 @@ describe('flimsy-dev/next: Next.js Adapter', () => {
           line: 2,
           col: 9,
           actions: [
-            { type: 'update-class', newClasses: 'bg-zinc-950 rounded-xl', mode: 'reconcile' },
+            { type: 'update-class', newClasses: 'bg-zinc-950 rounded-xl md:px-6 hover:bg-[#0ea5e9]', mode: 'reconcile' },
             { type: 'update-text', text: 'Synced Next CTA' },
           ],
         }),
@@ -133,8 +133,34 @@ describe('flimsy-dev/next: Next.js Adapter', () => {
       const disk = await fs.readFile(pagePath, 'utf-8');
       expect(disk).toContain('bg-zinc-950');
       expect(disk).toContain('rounded-xl');
+      expect(disk).toContain('md:px-6');
+      expect(disk).toContain('hover:bg-[#0ea5e9]');
       expect(disk).not.toContain('bg-blue-500');
       expect(disk).toContain('Synced Next CTA');
+
+      // 4. Insert new element into Next.js page container
+      await fs.writeFile(
+        pagePath,
+        `export default function Page() {\n  return <main className="p-6"><h1>Next</h1></main>;\n}\n`,
+        'utf-8'
+      );
+      const insRes = await fetch(`${server.url}/__flimsy/api/update`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'http://localhost:3000',
+        },
+        body: JSON.stringify({
+          file: 'app/page.tsx',
+          line: 2,
+          col: 9,
+          force: true,
+          action: { type: 'insert-element', preset: 'box', position: 'inside' },
+        }),
+      });
+      expect((await insRes.json()).success).toBe(true);
+      const nextDiskAfterInsert = await fs.readFile(pagePath, 'utf-8');
+      expect(nextDiskAfterInsert).toContain('<div className="p-6 rounded-xl bg-zinc-100 border border-zinc-200 min-h-[80px]">');
     } finally {
       await server.close();
     }

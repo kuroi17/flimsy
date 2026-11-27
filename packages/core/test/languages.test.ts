@@ -460,4 +460,43 @@ describe('@flimsy/core: Vanilla HTML & Angular Templates (.html)', () => {
     expect(delRes.success).toBe(true);
     expect(delRes.newCode).not.toContain('<button');
   });
+
+  it('inserts new starter elements (box, text, button, image) cleanly in Vue, Svelte, Astro, and HTML', async () => {
+    const vuePath = path.join(tempDir, 'Insert.vue');
+    await fs.writeFile(vuePath, `<template>\n  <section class="p-4">\n    <div class="slot" />\n  </section>\n</template>\n`, 'utf-8');
+    const vRes = await updateSourceFile({
+      filePath: vuePath,
+      line: 3,
+      column: 4,
+      action: { type: 'insert-element', preset: 'button', position: 'inside', text: 'Vue Action' },
+      rootDir: tempDir,
+    });
+    expect(vRes.success).toBe(true);
+    expect(vRes.newCode).toMatch(/<div class="slot">[\s\S]*<button type="button" class="[^"]*">Vue Action<\/button>[\s\S]*<\/div>/);
+
+    const sveltePath = path.join(tempDir, 'Insert.svelte');
+    await fs.writeFile(sveltePath, `<div class="p-4">\n  <p class="text-sm">Hello</p>\n</div>\n`, 'utf-8');
+    const sRes = await updateSourceFile({
+      filePath: sveltePath,
+      line: 2,
+      column: 2,
+      action: { type: 'insert-element', preset: 'text', position: 'after', text: 'Added in Svelte' },
+      rootDir: tempDir,
+    });
+    expect(sRes.success).toBe(true);
+    expect(sRes.newCode).toContain('<p class="text-base text-zinc-900">Added in Svelte</p>');
+
+    const htmlPath = path.join(tempDir, 'insert.html');
+    await fs.writeFile(htmlPath, `<!doctype html><html><body>\n  <img src="/logo.png" alt="Logo" class="w-10" />\n</body></html>\n`, 'utf-8');
+    const hRes = await updateSourceFile({
+      filePath: htmlPath,
+      line: 2,
+      column: 2,
+      action: { type: 'insert-element', preset: 'box', position: 'inside' },
+      rootDir: tempDir,
+    });
+    expect(hRes.success).toBe(true);
+    // Void <img> falls back to inserting after
+    expect(hRes.newCode).toContain('<img src="/logo.png" alt="Logo" class="w-10" />\n  <div class="');
+  });
 });

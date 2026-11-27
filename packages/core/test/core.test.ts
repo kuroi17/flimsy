@@ -603,5 +603,76 @@ export function Box({ className, active }: { className?: string; active: boolean
     expect(pasteInsideRes.success).toBe(true);
     expect(pasteInsideRes.newCode).toMatch(/<section className="slot">[\s\S]*Nested Copy[\s\S]*<\/section>/);
   });
+
+  it('inserts new starter elements (box, text, button, image) in React and SolidJS with void/self-closing safety', async () => {
+    const reactFile = path.join(tempDir, 'Canvas.tsx');
+    await fs.writeFile(
+      reactFile,
+      `export function Canvas() {\n  return (\n    <main className="p-6">\n      <div className="empty" />\n      <img src="/a.png" alt="A" className="w-16" />\n    </main>\n  );\n}\n`,
+      'utf-8'
+    );
+
+    // 1. Insert button inside self-closing <div className="empty" />
+    const r1 = await updateSourceFile({
+      filePath: reactFile,
+      line: 4,
+      column: 6,
+      action: { type: 'insert-element', preset: 'button', position: 'inside', text: 'Get Started' },
+      rootDir: tempDir,
+    });
+    expect(r1.success).toBe(true);
+    expect(r1.newCode).toMatch(/<div className="empty">[\s\S]*<button type="button" className="[^"]*">Get Started<\/button>[\s\S]*<\/div>/);
+
+    // 2. Insert image inside void <img> gracefully falls back to 'after'
+    const linesAfter1 = (r1.newCode || '').split('\n');
+    const imgLine = linesAfter1.findIndex((l) => l.includes('<img ')) + 1;
+    const r2 = await updateSourceFile({
+      filePath: reactFile,
+      line: imgLine,
+      column: 6,
+      action: { type: 'insert-element', preset: 'image', position: 'inside', alt: 'Banner' },
+      rootDir: tempDir,
+    });
+    expect(r2.success).toBe(true);
+    expect(r2.newCode).toContain('alt="Banner"');
+
+    // 3. Insert text before <main> children & box in SolidJS (`class=`)
+    const solidFile = path.join(tempDir, 'SolidBox.tsx');
+    await fs.writeFile(
+      solidFile,
+      `export function SolidBox() {\n  return <section class="p-4"><h1 class="text-xl">Solid</h1></section>;\n}\n`,
+      'utf-8'
+    );
+    const r3 = await updateSourceFile({
+      filePath: solidFile,
+      line: 2,
+      column: 9,
+      action: { type: 'insert-element', preset: 'box', position: 'inside' },
+      rootDir: tempDir,
+    });
+    expect(r3.success).toBe(true);
+    expect(r3.newCode).toContain('<div class="p-6 rounded-xl bg-zinc-100 border border-zinc-200 min-h-[80px]">');
+  });
+
+  it('isolates responsive and state variants during Tailwind class reconciliation', () => {
+    const existing = 'px-6 py-3 bg-white text-zinc-900 md:px-4 hover:bg-zinc-100 dark:text-zinc-200';
+    const updated = reconcileClasses(
+      existing,
+      'md:p-8 hover:bg-[#09090b] dark:text-white md:dark:hover:rounded-xl'
+    );
+    // Base px-6/py-3/bg-white/text-zinc-900 must remain untouched
+    expect(updated).toContain('px-6');
+    expect(updated).toContain('py-3');
+    expect(updated).toContain('bg-white');
+    expect(updated).toContain('text-zinc-900');
+    // Variant-scoped conflicts must be replaced cleanly
+    expect(updated).toContain('md:p-8');
+    expect(updated).not.toContain('md:px-4');
+    expect(updated).toContain('hover:bg-[#09090b]');
+    expect(updated).not.toContain('hover:bg-zinc-100');
+    expect(updated).toContain('dark:text-white');
+    expect(updated).not.toContain('dark:text-zinc-200');
+    expect(updated).toContain('md:dark:hover:rounded-xl');
+  });
 });
 

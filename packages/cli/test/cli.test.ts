@@ -94,6 +94,15 @@ describe('flimsy CLI package exports', () => {
           arguments: { snippets: ['<span className="text-xs">Badge</span>'], position: 'after' },
         },
       },
+      {
+        jsonrpc: '2.0',
+        id: 7,
+        method: 'tools/call',
+        params: {
+          name: 'flimsy_insert_element',
+          arguments: { preset: 'button', position: 'after', text: 'Created via MCP' },
+        },
+      },
     ];
 
     for (const req of requests) {
@@ -112,8 +121,8 @@ describe('flimsy CLI package exports', () => {
         .map((l) => l.trim())
         .filter(Boolean);
 
-      // Stdout must contain strictly valid JSON-RPC lines (6 requests with id; notification emits none)
-      expect(lines.length).toBe(6);
+      // Stdout must contain strictly valid JSON-RPC lines (7 requests with id; notification emits none)
+      expect(lines.length).toBe(7);
       for (const l of lines) {
         responses.push(JSON.parse(l));
       }
@@ -128,6 +137,7 @@ describe('flimsy CLI package exports', () => {
         'flimsy_update_classes',
         'flimsy_update_text',
         'flimsy_paste_elements',
+        'flimsy_insert_element',
       ]);
 
       const selRes = responses.find((r) => r.id === 3);
@@ -138,6 +148,7 @@ describe('flimsy CLI package exports', () => {
       expect(responses.find((r) => r.id === 4).result.isError).toBeUndefined();
       expect(responses.find((r) => r.id === 5).result.isError).toBeUndefined();
       expect(responses.find((r) => r.id === 6).result.isError).toBeUndefined();
+      expect(responses.find((r) => r.id === 7).result.isError).toBeUndefined();
 
       const updatedDisk = await fsp.readFile(samplePath, 'utf-8');
       expect(updatedDisk).toContain('bg-zinc-950');
@@ -145,6 +156,7 @@ describe('flimsy CLI package exports', () => {
       expect(updatedDisk).not.toContain('bg-blue-500');
       expect(updatedDisk).toContain('Synced via MCP');
       expect(updatedDisk).toContain('<span className="text-xs">Badge</span>');
+      expect(updatedDisk).toContain('Created via MCP');
     } finally {
       await fsp.rm(tempDir, { recursive: true, force: true });
     }

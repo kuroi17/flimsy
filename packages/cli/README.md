@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://cdn.jsdelivr.net/npm/flimsy-dev@0.4.0/assets/logo.jpg" alt="Flimsy Logo" width="140" />
+  <img src="https://cdn.jsdelivr.net/npm/flimsy-dev@0.5.0/assets/logo.jpg" alt="Flimsy Logo" width="140" />
 </p>
 
 <h1 align="center">Flimsy</h1>
@@ -11,12 +11,13 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/flimsy-dev"><img src="https://img.shields.io/npm/v/flimsy-dev.svg" alt="npm version" /></a>
+  <a href="https://github.com/kuroi17/flimsy/actions/workflows/ci.yml"><img src="https://github.com/kuroi17/flimsy/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://github.com/kuroi17/flimsy/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
   <a href="#privacy--local-first-guarantee"><img src="https://img.shields.io/badge/telemetry-none-brightgreen.svg" alt="Zero Telemetry" /></a>
 </p>
 
 <p align="center">
-  <img src="https://cdn.jsdelivr.net/npm/flimsy-dev@0.4.0/assets/demo.gif" alt="Flimsy Visual Studio Demo" width="860" />
+  <img src="https://cdn.jsdelivr.net/npm/flimsy-dev@0.5.0/assets/demo.gif" alt="Flimsy Visual Studio Demo" width="860" />
 </p>
 
 ---
@@ -25,7 +26,9 @@
 
 ## Key Capabilities
 
-- **Multi-Language Frontend Support:** Works deterministically across **React, Preact, SolidJS, Qwik, Vue JSX** (`.tsx`/`.jsx` with `className` and `class`), **Vue SFC** (`.vue`), **Svelte** (`.svelte`), **Astro** (`.astro`), and **Vanilla HTML / Angular / HTMX / Alpine** (`.html`/`.htm`).
+- **Multi-Language Frontend Support:** Works deterministically across **React, Next.js, Preact, SolidJS, Qwik, Vue JSX** (`.tsx`/`.jsx` with `className` and `class`), **Vue SFC** (`.vue`), **Svelte** (`.svelte`), **Astro** (`.astro`), and **Vanilla HTML / Angular / HTMX / Alpine** (`.html`/`.htm`).
+- **Insert & Delete Elements From Scratch:** Drop new starter elements (`Box`, `Text`, `Button`, `Image`) `Inside` or `After` any container from the `+` dock popover (`I`) or Layers panel, and write clean syntax-validated markup straight into your source files.
+- **Responsive Viewport & State Variant Editing:** Switch between `Full`, `Tablet (768px)`, and `Mobile (390px)` preview frames and target `Base`, `sm:`, `md:`, `lg:`, `hover:`, `focus:`, and `dark:` Tailwind variants with live optimistic preview and variant-isolated reconciliation.
 - **Zero AI Tokens for Standard Visual Edits:** Writes directly to your source files via deterministic AST & span reconciliation (`recast` + `magic-string`), preserving formatting, comments, directives, and dynamic expressions.
 - **Figma-Style Direct Manipulation:** Freeform canvas drag-to-move (`Rel` / `Abs`), 8-point resize with aspect-ratio lock (`Shift`), Canva/Figma corner text scaling, rotation handle, `Alt` distance measurement guides, and `Alt + Drag` live DOM reparenting.
 - **Viewport Zoom & Pan Camera:** Smooth cursor-anchored zoom (`Ctrl + Scroll` / pinch, `25%–300%`) and canvas panning (`Space + Drag`, Hand tool `H`, middle-mouse drag) without polluting user source code.
@@ -68,15 +71,12 @@ pnpm add -D flimsy-dev
 Register the plugin in `vite.config.ts`:
 
 ```ts
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import { flimsy } from 'flimsy-dev/vite';
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { flimsy } from "flimsy-dev/vite";
 
 export default defineConfig({
-  plugins: [
-    flimsy(),
-    react(),
-  ],
+  plugins: [flimsy(), react()],
 });
 ```
 
@@ -91,7 +91,7 @@ npm run dev
 Wrap your `next.config.mjs` (or `next.config.ts`) — works with both Webpack and Turbopack in development, and becomes a zero-byte no-op during `next build`:
 
 ```js
-import { withFlimsy } from 'flimsy-dev/next';
+import { withFlimsy } from "flimsy-dev/next";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {};
@@ -108,17 +108,25 @@ Flimsy ships an opt-in, zero-bloat stdio MCP server (`flimsy-dev mcp`) for Curso
   "mcpServers": {
     "flimsy": {
       "command": "npx",
-      "args": ["-y", "flimsy-dev@latest", "mcp", "--root", "/path/to/your/project"]
+      "args": [
+        "-y",
+        "flimsy-dev@latest",
+        "mcp",
+        "--root",
+        "/path/to/your/project"
+      ]
     }
   }
 }
 ```
 
 Exposed MCP tools:
+
 - `flimsy_get_selection` — Reads the currently selected element(s) from your live Flimsy browser session (file, line, column, JSX snippet, Tailwind classes, text), or inspects any explicit `{ file, line, col }`.
 - `flimsy_update_classes` — Reconciles Tailwind classes deterministically via Flimsy AST (preserving `cn()`, `clsx()`, and formatting).
 - `flimsy_update_text` — Updates element text content while preserving inline JSX expressions.
 - `flimsy_paste_elements` — Inserts validated JSX snippets `after` or `inside` a target element.
+- `flimsy_insert_element` — Creates and inserts starter elements (`box`, `text`, `button`, `image`) `inside`, `after`, or `before` a target element across JSX, Vue, Svelte, Astro, and HTML.
 
 ### Option 4: Install Agent Skill (`npx skills`)
 
@@ -132,26 +140,26 @@ npx skills add kuroi17/flimsy
 
 ## Shortcuts & Studio Controls
 
-| Shortcut / Action | Behavior |
-|---|---|
-| `Alt + X` | Toggle visual inspection mode on or off anywhere on the page. |
-| `V` / `H` | Switch between Select cursor (`V`) and Hand pan tool (`H`). |
-| `Space + Drag` / Middle-Click | Temporarily pan the viewport horizontally and vertically. |
-| `Ctrl + Scroll` / Pinch | Zoom in or out anchored to the cursor (`25%–300%`). |
-| `Ctrl + =` / `Ctrl + -` / `Ctrl + 0` | Zoom in, zoom out, or reset viewport to `100%`. |
-| `Drag Element` (`Shift` lock) | Move selected element(s) on canvas (`Rel` translate or `Abs` left/top). |
-| `Alt + Drag Element` | Live canvas DOM reparenting (move before, after, or inside a container). |
-| `Corner Drag` (`Shift` ratio) | Resize boxes or pull text corners to scale font size directly. |
-| `Arrow Keys` (`Shift` 10px) | Nudge selected element(s) by `1px` or `10px`. |
-| `Alt + Hover` | Show pixel distance measurement guides to surrounding elements. |
-| `Shift + Click` / Marquee Drag | Select multiple elements for batch styling, dragging, or copy/paste. |
-| `Ctrl + A` / `Cmd + A` | Select all sibling elements in the current container (press again to expand up). |
-| `Ctrl + C` / `Ctrl + V` | Copy and paste selected element(s) as clean JSX synced into `.tsx` via HMR. |
-| `Ctrl + D` / `Delete` | Duplicate or delete selected JSX element directly in AST. |
-| `Double-Click` | Edit element text inline (`contentEditable`) on the live page. |
-| `Shift + S` / `Ctrl + S` | Commit all pending visual edits atomically to `.tsx` source files. |
-| `Ctrl + Z` / `Ctrl + Y` | Undo or redo visual changes in the current session. |
-| `Esc` | Close active popover, deselect element(s), or exit inspect mode. |
+| Shortcut / Action                    | Behavior                                                                         |
+| ------------------------------------ | -------------------------------------------------------------------------------- |
+| `Alt + X`                            | Toggle visual inspection mode on or off anywhere on the page.                    |
+| `V` / `H` / `I`                      | Switch between Select cursor (`V`), Hand pan tool (`H`), or Insert Element popover (`I`). |
+| `Space + Drag` / Middle-Click        | Temporarily pan the viewport horizontally and vertically.                        |
+| `Ctrl + Scroll` / Pinch              | Zoom in or out anchored to the cursor (`25%–300%`).                              |
+| `Ctrl + =` / `Ctrl + -` / `Ctrl + 0` | Zoom in, zoom out, or reset viewport to `100%`.                                  |
+| `Drag Element` (`Shift` lock)        | Move selected element(s) on canvas (`Rel` translate or `Abs` left/top).          |
+| `Alt + Drag Element`                 | Live canvas DOM reparenting (move before, after, or inside a container).         |
+| `Corner Drag` (`Shift` ratio)        | Resize boxes or pull text corners to scale font size directly.                   |
+| `Arrow Keys` (`Shift` 10px)          | Nudge selected element(s) by `1px` or `10px`.                                    |
+| `Alt + Hover`                        | Show pixel distance measurement guides to surrounding elements.                  |
+| `Shift + Click` / Marquee Drag       | Select multiple elements for batch styling, dragging, or copy/paste.             |
+| `Ctrl + A` / `Cmd + A`               | Select all sibling elements in the current container (press again to expand up). |
+| `Ctrl + C` / `Ctrl + V`              | Copy and paste selected element(s) as clean JSX synced into `.tsx` via HMR.      |
+| `Ctrl + D` / `Delete`                | Duplicate or delete selected JSX element directly in AST.                        |
+| `Double-Click`                       | Edit element text inline (`contentEditable`) on the live page.                   |
+| `Shift + S` / `Ctrl + S`             | Commit all pending visual edits atomically to `.tsx` source files.               |
+| `Ctrl + Z` / `Ctrl + Y`              | Undo or redo visual changes in the current session.                              |
+| `Esc`                                | Close active popover, deselect element(s), or exit inspect mode.                 |
 
 ---
 

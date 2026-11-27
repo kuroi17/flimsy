@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildPreviewRule,
+  buildPreviewCssRule,
+  composeVariantPrefix,
+  prefixClassWithVariant,
   getClientClassCategory,
   parseRotationDeg,
   parseTranslatePx,
@@ -39,5 +42,25 @@ describe('Modular browser studio: tailwind-preview utilities', () => {
     const diff = buildClassUpdateAction('p-4 bg-white text-4xl sm:text-5xl', 'p-8 bg-zinc-950 text-[64px]');
     expect(diff.newClasses).toBe('p-8 bg-zinc-950 text-[64px]');
     expect(diff.removeClasses).toEqual(['p-4', 'bg-white', 'text-4xl', 'sm:text-5xl']);
+  });
+
+  it('composes responsive/state variant prefixes and builds live preview CSS rules', () => {
+    expect(composeVariantPrefix('', '', false)).toBe('');
+    expect(composeVariantPrefix('md', '', false)).toBe('md');
+    expect(composeVariantPrefix('md', 'hover', true)).toBe('md:dark:hover');
+    expect(prefixClassWithVariant('bg-[#0ea5e9]', 'md:hover')).toBe('md:hover:bg-[#0ea5e9]');
+    expect(prefixClassWithVariant('sm:text-lg', 'md')).toBe('sm:text-lg');
+
+    const mdRule = buildPreviewCssRule('md:bg-[#0ea5e9]');
+    expect(mdRule).toContain('@media (min-width: 768px)');
+    expect(mdRule).toContain('data-flimsy-preview-bp~="md"');
+    expect(mdRule).toContain('background-color: #0ea5e9;');
+
+    const hoverDarkRule = buildPreviewCssRule('dark:hover:text-[#ffffff]');
+    expect(hoverDarkRule).toContain('.dark [data-flimsy-file].');
+    expect(hoverDarkRule).toContain(':hover');
+    expect(hoverDarkRule).toContain('data-flimsy-preview-dark="1"');
+    expect(hoverDarkRule).toContain('data-flimsy-preview-state~="hover"');
+    expect(hoverDarkRule).toContain('color: #ffffff;');
   });
 });

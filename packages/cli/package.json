@@ -1,6 +1,6 @@
 {
   "name": "flimsy-dev",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "description": "Direct visual-to-code synchronization tool for React, Vue, Svelte, Astro, Solid, Angular, HTML, and Tailwind CSS with optional MCP bridge",
   "license": "MIT",
